@@ -1,0 +1,34 @@
+version: 1
+
+provider_address: "0x1234567890abcdef1234567890abcdef12345678"
+
+proxy:
+  target: "http://localhost:8080"
+  timeout: 30s
+
+routes:
+  - path: "/api/v1/premium/*"
+    price: "0.01"
+    settlement: "tab"
+
+  - path: "/api/v1/report"
+    method: "POST"
+    price: "5.00"
+    settlement: "direct"
+
+  - path: "/api/v1/health"
+    free: true
+
+default_action: "passthrough"
+
+global_allowlist: []
+
+rate_limits:
+  per_agent: "1000/min"
+  verification: "100/s"
+
+fail_mode: "closed"
+
+log:
+  level: "info"
+  format: "json"

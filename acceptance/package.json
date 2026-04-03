@@ -1,0 +1,15 @@
+{
+  "name": "pay-gate-acceptance",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test --test-timeout=30000 tests/*.test.js",
+    "test:rust": "TARGET=rust node --test --test-timeout=30000 tests/*.test.js",
+    "test:worker": "TARGET=worker node --test --test-timeout=30000 tests/*.test.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/node": "^22.0.0"
+  }
+}

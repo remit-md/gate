@@ -1,0 +1,86 @@
+name: Acceptance Tests
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test-rust:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build Rust binary
+        working-directory: rust
+        run: cargo build --release
+
+      - name: Install acceptance deps
+        working-directory: acceptance
+        run: npm install
+
+      - name: Start mock origin
+        working-directory: acceptance
+        run: npx tsx mock-origin.ts &
+
+      - name: Start mock facilitator
+        working-directory: acceptance
+        run: npx tsx mock-facilitator.ts &
+
+      - name: Start pay-gate (Rust)
+        run: |
+          cp pay-gate.example.yaml test-config.yaml
+          # TODO: generate test-specific config with mock facilitator URL
+          ./rust/target/release/pay-gate start --config test-config.yaml &
+          sleep 2
+
+      - name: Run acceptance tests
+        working-directory: acceptance
+        run: npx tsx --test tests/gate.test.ts
+        env:
+          TARGET: rust
+
+  test-worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install worker deps
+        working-directory: worker
+        run: npm install
+
+      - name: Install acceptance deps
+        working-directory: acceptance
+        run: npm install
+
+      - name: Start mock origin
+        working-directory: acceptance
+        run: npx tsx mock-origin.ts &
+
+      - name: Start mock facilitator
+        working-directory: acceptance
+        run: npx tsx mock-facilitator.ts &
+
+      - name: Start pay-gate (Worker)
+        working-directory: worker
+        run: npx wrangler dev --port 8402 &
+        env:
+          PROXY_TARGET: "http://localhost:9090"
+          FACILITATOR_URL: "http://localhost:9091"
+
+      - name: Wait for worker
+        run: sleep 3
+
+      - name: Run acceptance tests
+        working-directory: acceptance
+        run: npx tsx --test tests/gate.test.ts
+        env:
+          TARGET: worker

@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  gate:
+    build: .
+    ports:
+      - "8402:8402"
+    volumes:
+      - ./pay-gate.example.yaml:/etc/pay-gate/config.yaml:ro
+    environment:
+      - PAY_GATE_LOG_LEVEL=info
+    depends_on:
+      - origin
+
+  origin:
+    image: nginx:alpine
+    ports:
+      - "8080:80"

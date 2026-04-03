@@ -1,0 +1,15 @@
+name = "pay-gate"
+main = "src/index.ts"
+compatibility_date = "2026-04-01"
+
+[vars]
+PROVIDER_ADDRESS = "0x1234567890abcdef1234567890abcdef12345678"
+PROXY_TARGET = "https://api.example.com"
+DEFAULT_ACTION = "passthrough"
+FAIL_MODE = "closed"
+FACILITATOR_URL = "https://pay-skill.com/x402"
+LOG_LEVEL = "info"
+
+[[kv_namespaces]]
+binding = "ROUTES"
+id = "REPLACE_WITH_KV_ID"

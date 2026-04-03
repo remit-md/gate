@@ -1,0 +1,84 @@
+/**
+ * Shared test harness for pay-gate acceptance tests.
+ * Spawns mock origin, mock facilitator, and the target (Rust binary or CF Worker).
+ */
+
+const GATE_PORT = parseInt(process.env["GATE_PORT"] || "8402", 10);
+const ORIGIN_PORT = parseInt(process.env["MOCK_ORIGIN_PORT"] || "9090", 10);
+const FACILITATOR_PORT = parseInt(process.env["MOCK_FACILITATOR_PORT"] || "9091", 10);
+
+export const GATE_URL = `http://localhost:${GATE_PORT}`;
+export const ORIGIN_URL = `http://localhost:${ORIGIN_PORT}`;
+export const FACILITATOR_URL = `http://localhost:${FACILITATOR_PORT}`;
+
+/** GET/POST/PUT/etc against the gate. */
+export async function gateRequest(
+  path: string,
+  options: RequestInit = {},
+): Promise<Response> {
+  return fetch(`${GATE_URL}${path}`, options);
+}
+
+/** GET origin's recorded requests (for asserting injected headers). */
+export async function getOriginRequests(): Promise<unknown[]> {
+  const resp = await fetch(`${ORIGIN_URL}/__test/requests`);
+  return resp.json() as Promise<unknown[]>;
+}
+
+/** Clear origin request log. */
+export async function clearOriginRequests(): Promise<void> {
+  await fetch(`${ORIGIN_URL}/__test/clear`);
+}
+
+/** Set mock facilitator default behavior. */
+export async function setFacilitatorBehavior(behavior: {
+  valid: boolean;
+  reason?: string;
+  receipt?: string;
+  from?: string;
+  tab?: string;
+}): Promise<void> {
+  await fetch(`${FACILITATOR_URL}/__mock/set-default`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(behavior),
+  });
+}
+
+/** Set mock facilitator override for a specific payment value. */
+export async function setFacilitatorOverride(
+  payment: string,
+  behavior: { valid: boolean; reason?: string },
+): Promise<void> {
+  await fetch(`${FACILITATOR_URL}/__mock/set-override`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ payment, behavior }),
+  });
+}
+
+/** Reset mock facilitator to defaults. */
+export async function resetFacilitator(): Promise<void> {
+  await fetch(`${FACILITATOR_URL}/__mock/reset`, { method: "POST" });
+}
+
+/** Get facilitator /verify call count (to verify free routes skip facilitator). */
+export async function getFacilitatorCallCount(): Promise<number> {
+  const resp = await fetch(`${FACILITATOR_URL}/__mock/call-count`);
+  const data = await resp.json() as { count: number };
+  return data.count;
+}
+
+/** Decode PAYMENT-REQUIRED header (base64 JSON). */
+export function decodePaymentRequired(header: string): Record<string, unknown> {
+  return JSON.parse(atob(header));
+}
+
+/** Helper: assert status code. */
+export function assertStatus(resp: Response, expected: number, context?: string): void {
+  if (resp.status !== expected) {
+    throw new Error(
+      `Expected status ${expected}, got ${resp.status}${context ? ` (${context})` : ""}`
+    );
+  }
+}
