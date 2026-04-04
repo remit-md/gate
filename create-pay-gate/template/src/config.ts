@@ -1,0 +1,87 @@
+import type { Env, RouteConfig } from "./types";
+
+const ETH_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+const URL_RE = /^https?:\/\/.+/;
+
+/** Load and validate route config from KV (or fallback to empty). */
+export async function loadRoutes(env: Env): Promise<RouteConfig[]> {
+  const raw = await env.ROUTES.get("routes", "json");
+  if (!raw || !Array.isArray(raw)) return [];
+  return validateRoutes(raw as RouteConfig[]);
+}
+
+/** Validate an array of route configs. Throws on invalid. */
+export function validateRoutes(routes: RouteConfig[]): RouteConfig[] {
+  for (const r of routes) {
+    if (!r.path || typeof r.path !== "string") {
+      throw new Error(`Route missing 'path'`);
+    }
+    if (r.free) continue;
+    if (r.price_endpoint && !URL_RE.test(r.price_endpoint)) {
+      throw new Error(`Route ${r.path}: invalid price_endpoint URL`);
+    }
+    if (!r.price && !r.price_endpoint) {
+      throw new Error(`Route ${r.path}: must have 'price' or 'price_endpoint'`);
+    }
+    if (r.price) validatePrice(r.price, r.path);
+    if (r.settlement && r.settlement !== "direct" && r.settlement !== "tab") {
+      throw new Error(`Route ${r.path}: settlement must be 'direct' or 'tab'`);
+    }
+    if (r.method) {
+      const m = r.method.toUpperCase();
+      if (!["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"].includes(m)) {
+        throw new Error(`Route ${r.path}: invalid method '${r.method}'`);
+      }
+    }
+  }
+  return routes;
+}
+
+/** Validate a price string: positive decimal, not "0.00". */
+function validatePrice(price: string, path: string): void {
+  const n = parseFloat(price);
+  if (isNaN(n) || n <= 0) {
+    throw new Error(`Route ${path}: price must be a positive number, got '${price}'`);
+  }
+}
+
+/** Validate top-level env config. Throws on invalid. */
+export function validateEnv(env: Env): void {
+  if (!ETH_ADDRESS_RE.test(env.PROVIDER_ADDRESS)) {
+    throw new Error(`Invalid PROVIDER_ADDRESS: '${env.PROVIDER_ADDRESS}'`);
+  }
+  if (!URL_RE.test(env.PROXY_TARGET)) {
+    throw new Error(`Invalid PROXY_TARGET: '${env.PROXY_TARGET}'`);
+  }
+  if (env.DEFAULT_ACTION !== "passthrough" && env.DEFAULT_ACTION !== "block") {
+    throw new Error(`DEFAULT_ACTION must be 'passthrough' or 'block', got '${env.DEFAULT_ACTION}'`);
+  }
+  if (env.FAIL_MODE !== "closed" && env.FAIL_MODE !== "open") {
+    throw new Error(`FAIL_MODE must be 'closed' or 'open', got '${env.FAIL_MODE}'`);
+  }
+}
+
+/** Get facilitator URL (mainnet default). */
+export function facilitatorUrl(env: Env): string {
+  return env.FACILITATOR_URL || "https://pay-skill.com/x402";
+}
+
+/** Parse global allowlist from comma-separated env var. */
+export function globalAllowlist(env: Env): string[] {
+  const raw = env.GLOBAL_ALLOWLIST;
+  if (!raw) return [];
+  return raw.split(",").map((a) => a.trim().toLowerCase()).filter(Boolean);
+}
+
+/** Convert dollar price string to micro-USDC string (6 decimals). */
+export function priceToMicroUsdc(price: string): string {
+  const dollars = parseFloat(price);
+  const micro = Math.round(dollars * 1_000_000);
+  return micro.toString();
+}
+
+/** Auto-select settlement mode based on price. */
+export function autoSettlement(price: string): "direct" | "tab" {
+  const dollars = parseFloat(price);
+  return dollars <= 1.0 ? "tab" : "direct";
+}

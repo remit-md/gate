@@ -1,0 +1,23 @@
+{
+  "name": "create-pay-gate",
+  "version": "0.1.0",
+  "description": "Create a pay-gate x402 payment gateway for Cloudflare Workers",
+  "type": "module",
+  "bin": {
+    "create-pay-gate": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "template"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": ["x402", "pay", "payment", "gateway", "cloudflare", "workers"],
+  "license": "BSL-1.1",
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/node": "^22.0.0"
+  }
+}
