@@ -23,6 +23,10 @@ jobs:
         working-directory: acceptance
         run: npm install
 
+      - name: Compile acceptance tests
+        working-directory: acceptance
+        run: npx tsc
+
       - name: Start mock origin
         working-directory: acceptance
         run: npx tsx mock-origin.ts &
@@ -31,18 +35,57 @@ jobs:
         working-directory: acceptance
         run: npx tsx mock-facilitator.ts &
 
-      - name: Start pay-gate (Rust)
+      - name: Start pay-gate (passthrough, fail-closed)
         run: |
-          cp pay-gate.example.yaml test-config.yaml
-          # TODO: generate test-specific config with mock facilitator URL
-          ./rust/target/release/pay-gate start --config test-config.yaml &
-          sleep 2
+          ./rust/target/release/pay-gate dev \
+            --config acceptance/configs/passthrough.yaml \
+            --port 8402 \
+            --facilitator-url http://localhost:9091 &
+          sleep 1
 
-      - name: Run acceptance tests
+      - name: Start pay-gate (block mode)
+        run: |
+          ./rust/target/release/pay-gate dev \
+            --config acceptance/configs/block.yaml \
+            --port 8403 \
+            --facilitator-url http://localhost:9091 &
+          sleep 1
+
+      - name: Start pay-gate (fail-open mode)
+        run: |
+          ./rust/target/release/pay-gate dev \
+            --config acceptance/configs/fail-open.yaml \
+            --port 8404 \
+            --facilitator-url http://localhost:9091 &
+          sleep 1
+
+      - name: Run main acceptance tests
         working-directory: acceptance
         run: npx tsx --test tests/gate.test.ts
         env:
           TARGET: rust
+          GATE_PORT: "8402"
+
+      - name: Run block mode tests
+        working-directory: acceptance
+        run: npx tsx --test tests/gate-block.test.ts
+        env:
+          TARGET: rust
+          BLOCK_GATE_PORT: "8403"
+
+      - name: Run fail-open tests
+        working-directory: acceptance
+        run: npx tsx --test tests/gate-failopen.test.ts
+        env:
+          TARGET: rust
+          FAILOPEN_GATE_PORT: "8404"
+
+      - name: Run config validation tests
+        working-directory: acceptance
+        run: npx tsx --test tests/gate-config.test.ts
+        env:
+          TARGET: rust
+          PAY_GATE_BINARY: "../rust/target/release/pay-gate"
 
   test-worker:
     runs-on: ubuntu-latest
@@ -61,6 +104,10 @@ jobs:
         working-directory: acceptance
         run: npm install
 
+      - name: Compile acceptance tests
+        working-directory: acceptance
+        run: npx tsc
+
       - name: Start mock origin
         working-directory: acceptance
         run: npx tsx mock-origin.ts &
@@ -75,12 +122,16 @@ jobs:
         env:
           PROXY_TARGET: "http://localhost:9090"
           FACILITATOR_URL: "http://localhost:9091"
+          PROVIDER_ADDRESS: "0x1234567890abcdef1234567890abcdef12345678"
+          DEFAULT_ACTION: "passthrough"
+          FAIL_MODE: "closed"
 
       - name: Wait for worker
         run: sleep 3
 
-      - name: Run acceptance tests
+      - name: Run main acceptance tests
         working-directory: acceptance
         run: npx tsx --test tests/gate.test.ts
         env:
           TARGET: worker
+          GATE_PORT: "8402"

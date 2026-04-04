@@ -1,0 +1,44 @@
+version: 1
+
+provider_address: "0x1234567890abcdef1234567890abcdef12345678"
+
+proxy:
+  target: "http://localhost:9090"
+  timeout: "30s"
+
+routes:
+  - path: "/api/v1/premium/*"
+    price: "0.01"
+    settlement: "tab"
+
+  - path: "/api/v1/report"
+    method: "POST"
+    price: "5.00"
+    settlement: "direct"
+
+  - path: "/api/v1/generate/*"
+    price: "0.01"
+    price_endpoint: "http://localhost:9090/internal/pricing"
+    settlement: "tab"
+
+  - path: "/api/v1/health"
+    free: true
+
+  - path: "/api/v1/admin/*"
+    free: true
+    allowlist:
+      - "0xaaaa000000000000000000000000000000000000"
+
+default_action: "passthrough"
+
+global_allowlist: []
+
+rate_limits:
+  per_agent: "50/s"
+  verification: "100/s"
+
+fail_mode: "closed"
+
+log:
+  level: "debug"
+  format: "json"

@@ -4,9 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test --test-timeout=30000 tests/*.test.js",
-    "test:rust": "TARGET=rust node --test --test-timeout=30000 tests/*.test.js",
-    "test:worker": "TARGET=worker node --test --test-timeout=30000 tests/*.test.js"
+    "test": "node --test --test-timeout=30000 dist/tests/gate.test.js",
+    "test:block": "node --test --test-timeout=30000 dist/tests/gate-block.test.js",
+    "test:failopen": "node --test --test-timeout=30000 dist/tests/gate-failopen.test.js",
+    "test:config": "node --test --test-timeout=30000 dist/tests/gate-config.test.js",
+    "test:all": "node --test --test-timeout=30000 dist/tests/*.test.js",
+    "build": "tsc"
   },
   "devDependencies": {
     "typescript": "^5.5.0",
