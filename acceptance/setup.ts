@@ -62,6 +62,16 @@ export async function resetFacilitator(): Promise<void> {
   await fetch(`${FACILITATOR_URL}/__mock/reset`, { method: "POST" });
 }
 
+/** Set mock facilitator to "down" mode (returns 500 on /verify). */
+export async function setFacilitatorDown(): Promise<void> {
+  await fetch(`${FACILITATOR_URL}/__mock/set-down`, { method: "POST" });
+}
+
+/** Restore mock facilitator from "down" mode. */
+export async function setFacilitatorUp(): Promise<void> {
+  await fetch(`${FACILITATOR_URL}/__mock/set-up`, { method: "POST" });
+}
+
 /** Get facilitator /verify call count (to verify free routes skip facilitator). */
 export async function getFacilitatorCallCount(): Promise<number> {
   const resp = await fetch(`${FACILITATOR_URL}/__mock/call-count`);

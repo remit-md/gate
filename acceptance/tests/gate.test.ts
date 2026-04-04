@@ -6,14 +6,14 @@
  *   2. Mock facilitator running on :9091 (mock-facilitator.ts)
  *   3. Target gateway running on :8402 (Rust binary or CF Worker)
  *
- * Config expected:
+ * Config expected (passthrough.yaml):
  *   - /api/v1/premium/* → $0.01, tab settlement
  *   - /api/v1/report (POST only) → $5.00, direct settlement
  *   - /api/v1/generate/* → dynamic pricing via price_endpoint
  *   - /api/v1/health → free
  *   - /api/v1/admin/* → free, allowlist: [0xaaaa...]
- *   - default_action: passthrough (or block, toggled per test)
- *   - fail_mode: closed (toggled per test)
+ *   - default_action: passthrough
+ *   - fail_mode: closed
  */
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
@@ -24,9 +24,9 @@ import {
   setFacilitatorBehavior,
   resetFacilitator,
   getFacilitatorCallCount,
+  setFacilitatorDown,
   decodePaymentRequired,
   assertStatus,
-  GATE_URL,
 } from "../setup.js";
 
 describe("pay-gate acceptance", () => {
@@ -158,8 +158,7 @@ describe("pay-gate acceptance", () => {
 
   // ── 8. Rate limited → 429 ────────────────────────────────────
   it("returns 429 when rate limited", async () => {
-    // This test depends on rate limit config — with low limits in test config,
-    // hammer the endpoint until 429
+    // Test config has per_agent: 50/s — send rapid requests until 429
     let got429 = false;
     for (let i = 0; i < 200; i++) {
       const resp = await gateRequest("/api/v1/premium/data");
@@ -167,34 +166,25 @@ describe("pay-gate acceptance", () => {
         got429 = true;
         break;
       }
-      // Consume body to free connection
       await resp.text();
     }
-    // If rate limiting is set very high, this test might not trigger
-    // Mark as skipped rather than failing if limits are too high
-    if (!got429) {
-      console.log("  [skip] Rate limit not reached with 200 requests — adjust test config");
-    }
+    assert.ok(got429, "Expected 429 within 200 requests (rate limit: 50/s)");
   });
 
   // ── 9. Facilitator down + fail_mode closed → 503 ─────────────
-  // NOTE: This test requires the gateway to be configured with a mock
-  // facilitator that's stopped. The test harness should support this.
   it("returns 503 when facilitator is down and fail_mode is closed", async () => {
-    // Set facilitator to return null (simulate unreachable)
-    // This requires the mock facilitator to be stopped or the gateway
-    // pointed at a non-existent URL. For now, test with a specific marker.
-    // In practice, stop mock-facilitator before this test.
-    console.log("  [requires facilitator down — run with special config]");
+    await setFacilitatorDown();
+
+    const resp = await gateRequest("/api/v1/premium/data", {
+      headers: { "PAYMENT-SIGNATURE": "some-payment-proof" },
+    });
+
+    assertStatus(resp, 503);
+    const body = await resp.json() as Record<string, unknown>;
+    assert.equal(body["error"], "service_unavailable");
   });
 
-  // ── 10. Facilitator down + fail_mode open → proxied ──────────
-  it("proxies through when facilitator is down and fail_mode is open", async () => {
-    // Same caveat as test 9 — requires fail_mode=open config
-    console.log("  [requires fail_mode=open config + facilitator down]");
-  });
-
-  // ── 11. Health endpoint → 200 ────────────────────────────────
+  // ── 10. Health endpoint → 200 ────────────────────────────────
   it("health endpoint returns 200 with status", async () => {
     const resp = await gateRequest("/__pay/health");
 
@@ -205,9 +195,9 @@ describe("pay-gate acceptance", () => {
     assert.ok("facilitator" in body);
   });
 
-  // ── 12. Sidecar mode → same behavior via /__pay/check ────────
+  // ── 11. Sidecar mode → same behavior via /__pay/check ────────
   it("sidecar check returns 402 for unpaid request", async () => {
-    const resp = await fetch(`${GATE_URL}/__pay/check`, {
+    const resp = await gateRequest("/__pay/check", {
       method: "POST",
       headers: {
         "X-Original-URI": "/api/v1/premium/data",
@@ -220,7 +210,7 @@ describe("pay-gate acceptance", () => {
   });
 
   it("sidecar check returns 200 for free route", async () => {
-    const resp = await fetch(`${GATE_URL}/__pay/check`, {
+    const resp = await gateRequest("/__pay/check", {
       method: "POST",
       headers: {
         "X-Original-URI": "/api/v1/health",
@@ -232,7 +222,7 @@ describe("pay-gate acceptance", () => {
     assert.equal(resp.headers.get("x-pay-verified"), "free");
   });
 
-  // ── 13. Browser request → HTML 402 page ──────────────────────
+  // ── 12. Browser request → HTML 402 page ──────────────────────
   it("returns HTML 402 for Accept: text/html", async () => {
     const resp = await gateRequest("/api/v1/premium/data", {
       headers: { Accept: "text/html" },
@@ -248,7 +238,7 @@ describe("pay-gate acceptance", () => {
     assert.ok(body.includes("pay-skill.com/gate"));
   });
 
-  // ── 14. Unmatched route + passthrough → proxied ───────────────
+  // ── 13. Unmatched route + passthrough → proxied ───────────────
   it("passes through unmatched routes when default_action is passthrough", async () => {
     const resp = await gateRequest("/some/unmatched/path");
 
@@ -258,22 +248,7 @@ describe("pay-gate acceptance", () => {
     assert.equal(body["echo"], true);
   });
 
-  // ── 15. Unmatched route + block → 403 ────────────────────────
-  // NOTE: Requires gateway configured with default_action=block
-  it("blocks unmatched routes when default_action is block", async () => {
-    // This test needs a separate config with default_action=block
-    // or a runtime toggle. For now, document the expectation.
-    console.log("  [requires default_action=block config]");
-  });
-
-  // ── 16. Config validation → reject invalid ────────────────────
-  it("rejects invalid provider address in config", async () => {
-    // This is a startup-time validation test, not a runtime test.
-    // Verify via CLI: pay-gate validate --config bad.yaml → exit 1
-    console.log("  [startup validation — test via CLI]");
-  });
-
-  // ── 17. Method-specific routes ────────────────────────────────
+  // ── 14. Method-specific routes ────────────────────────────────
   it("method-specific route only matches specified method", async () => {
     // POST /api/v1/report → 402 (paid, $5.00, direct)
     const postResp = await gateRequest("/api/v1/report", { method: "POST" });

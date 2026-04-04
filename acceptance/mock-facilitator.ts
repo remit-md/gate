@@ -20,10 +20,16 @@ let defaultBehavior: MockVerifyBehavior = {
 
 let overrides: Map<string, MockVerifyBehavior> = new Map();
 let verifyCallCount = 0;
+let isDown = false;
 
 const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
   // GET /supported — health check
   if (req.url === "/supported" && req.method === "GET") {
+    if (isDown) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "service_unavailable" }));
+      return;
+    }
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ direct: true, tab: true }));
     return;
@@ -32,6 +38,11 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   // POST /verify
   if (req.url === "/verify" && req.method === "POST") {
     verifyCallCount++;
+    if (isDown) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "service_unavailable" }));
+      return;
+    }
     const body = await readBody(req);
     const parsed = JSON.parse(body);
 
@@ -61,6 +72,20 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
     return;
   }
 
+  if (req.url === "/__mock/set-down" && req.method === "POST") {
+    isDown = true;
+    res.writeHead(200);
+    res.end("ok");
+    return;
+  }
+
+  if (req.url === "/__mock/set-up" && req.method === "POST") {
+    isDown = false;
+    res.writeHead(200);
+    res.end("ok");
+    return;
+  }
+
   if (req.url === "/__mock/reset" && req.method === "POST") {
     defaultBehavior = {
       valid: true,
@@ -69,6 +94,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
     };
     overrides.clear();
     verifyCallCount = 0;
+    isDown = false;
     res.writeHead(200);
     res.end("ok");
     return;

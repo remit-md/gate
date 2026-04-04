@@ -54,6 +54,9 @@ enum Command {
         config: PathBuf,
         #[arg(short, long, default_value = "8402")]
         port: u16,
+        /// Override facilitator URL (dev/test only)
+        #[arg(long, env = "PAY_GATE_FACILITATOR_URL")]
+        facilitator_url: Option<String>,
     },
     /// Start gateway (mock mode, no verification, accepts all payments)
     Mock {
@@ -61,6 +64,9 @@ enum Command {
         config: PathBuf,
         #[arg(short, long, default_value = "8402")]
         port: u16,
+        /// Override facilitator URL (dev/test only)
+        #[arg(long, env = "PAY_GATE_FACILITATOR_URL")]
+        facilitator_url: Option<String>,
     },
     /// Check config without starting
     Validate {
@@ -96,18 +102,24 @@ async fn main() {
             }
         }
         Command::Start { config, port, sidecar } => {
-            run_server(config, port, GateMode::Production, sidecar).await;
+            run_server(config, port, GateMode::Production, sidecar, None).await;
         }
-        Command::Dev { config, port } => {
-            run_server(config, port, GateMode::Dev, false).await;
+        Command::Dev { config, port, facilitator_url } => {
+            run_server(config, port, GateMode::Dev, false, facilitator_url).await;
         }
-        Command::Mock { config, port } => {
-            run_server(config, port, GateMode::Mock, false).await;
+        Command::Mock { config, port, facilitator_url } => {
+            run_server(config, port, GateMode::Mock, false, facilitator_url).await;
         }
     }
 }
 
-async fn run_server(config_path: PathBuf, port: u16, mode: GateMode, _sidecar: bool) {
+async fn run_server(
+    config_path: PathBuf,
+    port: u16,
+    mode: GateMode,
+    _sidecar: bool,
+    facilitator_url_override: Option<String>,
+) {
     // Init tracing
     let subscriber = tracing_subscriber::fmt()
         .with_env_filter(
@@ -136,7 +148,8 @@ async fn run_server(config_path: PathBuf, port: u16, mode: GateMode, _sidecar: b
         }
     };
 
-    let facilitator_url = config::facilitator_url(mode).to_string();
+    let facilitator_url = facilitator_url_override
+        .unwrap_or_else(|| config::facilitator_url(mode).to_string());
     let client = verify::build_client();
 
     // Build rate limiters
