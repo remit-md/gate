@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import {
   clearOriginRequests,
   resetFacilitator,
+  decodePaymentRequired,
   assertStatus,
 } from "../setup.js";
 
@@ -38,7 +39,11 @@ describe("pay-gate block mode", () => {
 
     // Should still return 402 (route matched, just unpaid)
     assertStatus(resp, 402);
-    assert.ok(resp.headers.get("payment-required"));
+    const prHeader = resp.headers.get("payment-required");
+    assert.ok(prHeader);
+    const decoded = decodePaymentRequired(prHeader);
+    assert.equal(decoded["x402Version"], 2);
+    assert.ok(Array.isArray(decoded["accepts"]));
   });
 
   it("still allows free routes in block mode", async () => {

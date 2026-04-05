@@ -219,6 +219,27 @@ pub fn auto_settlement(price: &str) -> Settlement {
     if dollars <= 1.0 { Settlement::Tab } else { Settlement::Direct }
 }
 
+/// Chain ID for a given mode.
+pub fn chain_id(mode: GateMode) -> u64 {
+    match mode {
+        GateMode::Production => 8453,
+        GateMode::Dev | GateMode::Mock => 84532,
+    }
+}
+
+/// USDC contract address for a given chain.
+pub fn usdc_address(chain_id: u64) -> &'static str {
+    match chain_id {
+        8453 => "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        _ => "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+    }
+}
+
+/// CAIP-2 network identifier.
+pub fn caip2_network(chain_id: u64) -> String {
+    format!("eip155:{chain_id}")
+}
+
 /// Facilitator URL for a given mode.
 pub fn facilitator_url(mode: GateMode) -> &'static str {
     match mode {

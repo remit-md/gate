@@ -1,26 +1,26 @@
 /**
- * Mock facilitator for unit-level acceptance tests.
- * Returns configurable verify responses.
+ * Mock facilitator for acceptance tests — x402 v2 wire format.
+ * Accepts v2 verify requests, returns v2 responses.
+ * Records all received verify requests for test assertions.
  */
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
 
 export interface MockVerifyBehavior {
-  valid: boolean;
-  reason?: string;
-  receipt?: string;
-  from?: string;
-  tab?: string;
+  isValid: boolean;
+  invalidReason?: string;
+  payer?: string;
 }
 
 let defaultBehavior: MockVerifyBehavior = {
-  valid: true,
-  receipt: "mock-receipt-abc123",
-  from: "0xmockagent0000000000000000000000000000001",
+  isValid: true,
+  payer: "0xmockagent0000000000000000000000000000001",
 };
 
 let overrides: Map<string, MockVerifyBehavior> = new Map();
 let verifyCallCount = 0;
 let isDown = false;
+let lastVerifyRequest: unknown = null;
+let verifyRequests: unknown[] = [];
 
 const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
   // GET /supported — health check
@@ -35,7 +35,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
     return;
   }
 
-  // POST /verify
+  // POST /verify — v2 format
   if (req.url === "/verify" && req.method === "POST") {
     verifyCallCount++;
     if (isDown) {
@@ -46,8 +46,33 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
     const body = await readBody(req);
     const parsed = JSON.parse(body);
 
-    // Check if there's an override for this payment value
-    const behavior = overrides.get(parsed.payment) || defaultBehavior;
+    // Record for test assertions
+    lastVerifyRequest = parsed;
+    verifyRequests.push(parsed);
+
+    // Validate v2 format
+    if (parsed.x402Version !== 2) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ isValid: false, invalidReason: "x402Version must be 2" }));
+      return;
+    }
+
+    if (typeof parsed.paymentPayload !== "object" || parsed.paymentPayload === null) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ isValid: false, invalidReason: "paymentPayload must be an object" }));
+      return;
+    }
+
+    const reqs = parsed.paymentRequirements;
+    if (!reqs || !reqs.network || !reqs.payTo || !reqs.asset) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ isValid: false, invalidReason: "invalid paymentRequirements" }));
+      return;
+    }
+
+    // Use a key from paymentPayload for override lookup (if it has a signature or test marker)
+    const payloadStr = JSON.stringify(parsed.paymentPayload);
+    const behavior = overrides.get(payloadStr) || defaultBehavior;
 
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify(behavior));
@@ -88,13 +113,14 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
 
   if (req.url === "/__mock/reset" && req.method === "POST") {
     defaultBehavior = {
-      valid: true,
-      receipt: "mock-receipt-abc123",
-      from: "0xmockagent0000000000000000000000000000001",
+      isValid: true,
+      payer: "0xmockagent0000000000000000000000000000001",
     };
     overrides.clear();
     verifyCallCount = 0;
     isDown = false;
+    lastVerifyRequest = null;
+    verifyRequests = [];
     res.writeHead(200);
     res.end("ok");
     return;
@@ -103,6 +129,18 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   if (req.url === "/__mock/call-count" && req.method === "GET") {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ count: verifyCallCount }));
+    return;
+  }
+
+  if (req.url === "/__mock/last-request" && req.method === "GET") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(lastVerifyRequest));
+    return;
+  }
+
+  if (req.url === "/__mock/requests" && req.method === "GET") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(verifyRequests));
     return;
   }
 

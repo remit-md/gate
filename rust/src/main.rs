@@ -163,6 +163,7 @@ async fn run_server(
         mode,
         facilitator_url,
         start_time: Instant::now(),
+        chain_id: config::chain_id(mode),
     });
 
     let agent_limiter = Arc::clone(&agent_limiter);
@@ -319,15 +320,12 @@ async fn proxy_to_origin(
             req.headers_mut().insert("x-pay-verified", "allowlisted".parse().unwrap());
             req.headers_mut().insert("x-pay-from", agent.parse().unwrap());
         }
-        GateDecision::ProxyVerified { from, amount, settlement, tab, .. } => {
+        GateDecision::ProxyVerified { payer, amount, settlement, .. } => {
             req.headers_mut().insert("x-pay-verified", "true".parse().unwrap());
             req.headers_mut().insert("x-pay-amount", amount.parse().unwrap());
             req.headers_mut().insert("x-pay-settlement", settlement.parse().unwrap());
-            if let Some(f) = from {
+            if let Some(f) = payer {
                 req.headers_mut().insert("x-pay-from", f.parse().unwrap());
-            }
-            if let Some(t) = tab {
-                req.headers_mut().insert("x-pay-tab", t.parse().unwrap());
             }
         }
         GateDecision::Respond(_) => unreachable!(),
@@ -341,9 +339,9 @@ async fn proxy_to_origin(
 
     let mut final_resp = Response::from_parts(parts, Full::new(body_bytes));
 
-    // Add receipt header if present
-    if let GateDecision::ProxyVerified { receipt: Some(ref r), .. } = decision {
-        final_resp.headers_mut().insert("payment-response", r.parse().unwrap());
+    // Add v2 settlement response as PAYMENT-RESPONSE header
+    if let GateDecision::ProxyVerified { ref receipt, .. } = decision {
+        final_resp.headers_mut().insert("payment-response", receipt.parse().unwrap());
     }
 
     Ok(final_resp)

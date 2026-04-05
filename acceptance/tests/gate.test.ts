@@ -26,8 +26,20 @@ import {
   getFacilitatorCallCount,
   setFacilitatorDown,
   decodePaymentRequired,
+  encodePaymentSignature,
+  getLastFacilitatorRequest,
   assertStatus,
 } from "../setup.js";
+
+/** Build a mock v2 PAYMENT-SIGNATURE header value. */
+function mockPaymentSig(marker?: string): string {
+  return encodePaymentSignature({
+    x402Version: 2,
+    accepted: { scheme: "exact", network: "eip155:84532", amount: "10000" },
+    payload: { signature: marker || "0xmocksig" },
+    extensions: {},
+  });
+}
 
 describe("pay-gate acceptance", () => {
   beforeEach(async () => {
@@ -36,41 +48,62 @@ describe("pay-gate acceptance", () => {
   });
 
   // ── 1. Unpaid request → 402 ──────────────────────────────────
-  it("returns 402 with PAYMENT-REQUIRED header for unpaid request", async () => {
+  it("returns 402 with v2 PAYMENT-REQUIRED header for unpaid request", async () => {
     const resp = await gateRequest("/api/v1/premium/data");
 
     assertStatus(resp, 402);
     const prHeader = resp.headers.get("payment-required");
     assert.ok(prHeader, "Missing PAYMENT-REQUIRED header");
 
-    const reqs = decodePaymentRequired(prHeader);
+    const decoded = decodePaymentRequired(prHeader);
+    assert.equal(decoded["x402Version"], 2);
+    assert.ok(Array.isArray(decoded["accepts"]));
+    const accepts = decoded["accepts"] as Record<string, unknown>[];
+    assert.ok(accepts.length > 0);
+
+    const reqs = accepts[0]!;
     assert.equal(reqs["scheme"], "exact");
     assert.equal(reqs["amount"], "10000"); // $0.01 = 10000 micro-USDC
-    assert.equal(reqs["settlement"], "tab");
-    assert.equal(reqs["network"], "base");
-    assert.ok(reqs["to"], "Missing 'to' field");
-    assert.ok(reqs["facilitator"], "Missing 'facilitator' field");
-    assert.equal(reqs["maxChargePerCall"], "10000");
+    assert.ok((reqs["network"] as string).startsWith("eip155:"));
+    assert.ok((reqs["asset"] as string).startsWith("0x"));
+    assert.ok(reqs["payTo"], "Missing 'payTo' field");
+    assert.equal(typeof reqs["maxTimeoutSeconds"], "number");
+
+    const extra = reqs["extra"] as Record<string, unknown>;
+    assert.ok(extra);
+    assert.equal(extra["settlement"], "tab");
+    assert.ok((extra["facilitator"] as string).startsWith("http"));
+    assert.equal(extra["name"], "USDC");
+
+    const resource = decoded["resource"] as Record<string, unknown>;
+    assert.ok(resource);
+    assert.ok(resource["url"]);
 
     const body = await resp.json() as Record<string, unknown>;
     assert.equal(body["error"], "payment_required");
     assert.ok((body["message"] as string).includes("$0.01"));
   });
 
-  // ── 2. Paid request (valid direct) → proxied ─────────────────
+  // ── 2. Paid request (valid) → proxied ───────────────────────
   it("proxies valid paid request with X-Pay-* headers", async () => {
     await setFacilitatorBehavior({
-      valid: true,
-      receipt: "receipt-123",
-      from: "0xagent0000000000000000000000000000000001",
+      isValid: true,
+      payer: "0xagent0000000000000000000000000000000001",
     });
 
     const resp = await gateRequest("/api/v1/premium/data", {
-      headers: { "PAYMENT-SIGNATURE": "valid-payment-proof" },
+      headers: { "PAYMENT-SIGNATURE": mockPaymentSig() },
     });
 
     assertStatus(resp, 200);
-    assert.equal(resp.headers.get("payment-response"), "receipt-123");
+
+    // PAYMENT-RESPONSE is now a base64-encoded v2 settlement response
+    const prHeader = resp.headers.get("payment-response");
+    assert.ok(prHeader, "Missing PAYMENT-RESPONSE header");
+    const settlement = JSON.parse(atob(prHeader));
+    assert.equal(settlement.success, true);
+    assert.ok(settlement.network.startsWith("eip155:"));
+    assert.equal(settlement.payer, "0xagent0000000000000000000000000000000001");
 
     // Verify origin received correct headers
     const reqs = await getOriginRequests() as Array<{ headers: Record<string, string> }>;
@@ -82,35 +115,45 @@ describe("pay-gate acceptance", () => {
     assert.equal(last.headers["x-pay-settlement"], "tab");
   });
 
-  // ── 3. Paid request (valid tab) → proxied with tab header ────
-  it("proxies tab-backed payment with X-Pay-Tab header", async () => {
+  // ── 3. Paid request (valid tab) → proxied with tab proof ────
+  it("proxies tab-backed payment", async () => {
     await setFacilitatorBehavior({
-      valid: true,
-      receipt: "receipt-tab-456",
-      from: "0xagent0000000000000000000000000000000002",
-      tab: "tab_abc123",
+      isValid: true,
+      payer: "0xagent0000000000000000000000000000000002",
+    });
+
+    const tabSig = encodePaymentSignature({
+      x402Version: 2,
+      accepted: { scheme: "exact" },
+      payload: {},
+      extensions: { pay: { settlement: "tab", tabId: "tab_abc123", chargeId: "ch_1" } },
     });
 
     const resp = await gateRequest("/api/v1/premium/data", {
-      headers: { "PAYMENT-SIGNATURE": "tab-payment-proof" },
+      headers: { "PAYMENT-SIGNATURE": tabSig },
     });
 
     assertStatus(resp, 200);
 
-    const reqs = await getOriginRequests() as Array<{ headers: Record<string, string> }>;
-    const last = reqs[reqs.length - 1]!;
-    assert.equal(last.headers["x-pay-tab"], "tab_abc123");
+    // Verify facilitator received v2 format
+    const verifyReq = await getLastFacilitatorRequest();
+    assert.ok(verifyReq);
+    assert.equal(verifyReq["x402Version"], 2);
+    assert.ok(typeof verifyReq["paymentPayload"] === "object");
+    const reqs = verifyReq["paymentRequirements"] as Record<string, unknown>;
+    assert.ok((reqs["network"] as string).startsWith("eip155:"));
+    assert.ok(reqs["payTo"]);
   });
 
   // ── 4. Paid request (invalid) → 402 with reason ──────────────
   it("returns 402 with reason for invalid payment", async () => {
     await setFacilitatorBehavior({
-      valid: false,
-      reason: "insufficient_balance",
+      isValid: false,
+      invalidReason: "insufficient_balance",
     });
 
     const resp = await gateRequest("/api/v1/premium/data", {
-      headers: { "PAYMENT-SIGNATURE": "invalid-payment" },
+      headers: { "PAYMENT-SIGNATURE": mockPaymentSig() },
     });
 
     assertStatus(resp, 402);
@@ -152,8 +195,9 @@ describe("pay-gate acceptance", () => {
     assertStatus(resp, 402);
     const prHeader = resp.headers.get("payment-required");
     assert.ok(prHeader);
-    const reqs = decodePaymentRequired(prHeader);
-    assert.equal(reqs["amount"], "50000"); // $0.05 = 50000 micro-USDC
+    const decoded = decodePaymentRequired(prHeader);
+    const accepts = decoded["accepts"] as Record<string, unknown>[];
+    assert.equal(accepts[0]!["amount"], "50000"); // $0.05 = 50000 micro-USDC
   });
 
   // ── 8. Rate limited → 429 ────────────────────────────────────
@@ -176,7 +220,7 @@ describe("pay-gate acceptance", () => {
     await setFacilitatorDown();
 
     const resp = await gateRequest("/api/v1/premium/data", {
-      headers: { "PAYMENT-SIGNATURE": "some-payment-proof" },
+      headers: { "PAYMENT-SIGNATURE": mockPaymentSig() },
     });
 
     assertStatus(resp, 503);
@@ -206,7 +250,10 @@ describe("pay-gate acceptance", () => {
     });
 
     assertStatus(resp, 402);
-    assert.ok(resp.headers.get("payment-required"));
+    const prHeader = resp.headers.get("payment-required");
+    assert.ok(prHeader);
+    const decoded = decodePaymentRequired(prHeader);
+    assert.equal(decoded["x402Version"], 2);
   });
 
   it("sidecar check returns 200 for free route", async () => {
@@ -242,7 +289,6 @@ describe("pay-gate acceptance", () => {
   it("passes through unmatched routes when default_action is passthrough", async () => {
     const resp = await gateRequest("/some/unmatched/path");
 
-    // With passthrough default, should proxy to origin
     assertStatus(resp, 200);
     const body = await resp.json() as Record<string, unknown>;
     assert.equal(body["echo"], true);
@@ -255,13 +301,14 @@ describe("pay-gate acceptance", () => {
     assertStatus(postResp, 402);
     const prHeader = postResp.headers.get("payment-required");
     assert.ok(prHeader);
-    const reqs = decodePaymentRequired(prHeader);
-    assert.equal(reqs["amount"], "5000000"); // $5.00
-    assert.equal(reqs["settlement"], "direct");
+    const decoded = decodePaymentRequired(prHeader);
+    const accepts = decoded["accepts"] as Record<string, unknown>[];
+    assert.equal(accepts[0]!["amount"], "5000000"); // $5.00
+    const extra = accepts[0]!["extra"] as Record<string, unknown>;
+    assert.equal(extra["settlement"], "direct");
 
     // GET /api/v1/report → passthrough (no route match)
     const getResp = await gateRequest("/api/v1/report", { method: "GET" });
-    // Should be passthrough (200 from origin) since default_action=passthrough
     assertStatus(getResp, 200);
   });
 
@@ -276,13 +323,12 @@ describe("pay-gate acceptance", () => {
   // ── Additional: payment-signature not forwarded to origin ─────
   it("strips PAYMENT-SIGNATURE header from proxied requests", async () => {
     await setFacilitatorBehavior({
-      valid: true,
-      receipt: "receipt-strip-test",
-      from: "0xagent0000000000000000000000000000000003",
+      isValid: true,
+      payer: "0xagent0000000000000000000000000000000003",
     });
 
     await gateRequest("/api/v1/premium/data", {
-      headers: { "PAYMENT-SIGNATURE": "some-proof" },
+      headers: { "PAYMENT-SIGNATURE": mockPaymentSig() },
     });
 
     const reqs = await getOriginRequests() as Array<{ headers: Record<string, string> }>;
@@ -292,18 +338,45 @@ describe("pay-gate acceptance", () => {
   });
 
   // ── Additional: PAYMENT-RESPONSE header on proxied response ──
-  it("adds PAYMENT-RESPONSE header to successful paid response", async () => {
+  it("adds v2 PAYMENT-RESPONSE header to successful paid response", async () => {
     await setFacilitatorBehavior({
-      valid: true,
-      receipt: "receipt-resp-test",
-      from: "0xagent0000000000000000000000000000000004",
+      isValid: true,
+      payer: "0xagent0000000000000000000000000000000004",
     });
 
     const resp = await gateRequest("/api/v1/premium/data", {
-      headers: { "PAYMENT-SIGNATURE": "valid-proof-2" },
+      headers: { "PAYMENT-SIGNATURE": mockPaymentSig() },
     });
 
     assertStatus(resp, 200);
-    assert.equal(resp.headers.get("payment-response"), "receipt-resp-test");
+    const prHeader = resp.headers.get("payment-response");
+    assert.ok(prHeader, "Missing PAYMENT-RESPONSE header");
+    const settlement = JSON.parse(atob(prHeader));
+    assert.equal(settlement.success, true);
+    assert.ok(settlement.network.startsWith("eip155:"));
+    assert.equal(settlement.payer, "0xagent0000000000000000000000000000000004");
+  });
+
+  // ── Verify request format check ──────────────────────────────
+  it("sends v2 format to facilitator /verify", async () => {
+    await setFacilitatorBehavior({
+      isValid: true,
+      payer: "0xagent0000000000000000000000000000000005",
+    });
+
+    await gateRequest("/api/v1/premium/data", {
+      headers: { "PAYMENT-SIGNATURE": mockPaymentSig("0xtest-verify-format") },
+    });
+
+    const verifyReq = await getLastFacilitatorRequest();
+    assert.ok(verifyReq, "No verify request recorded");
+    assert.equal(verifyReq["x402Version"], 2);
+    assert.ok(typeof verifyReq["paymentPayload"] === "object");
+    const reqs = verifyReq["paymentRequirements"] as Record<string, unknown>;
+    assert.ok(reqs);
+    assert.ok((reqs["network"] as string).startsWith("eip155:"));
+    assert.ok(reqs["payTo"]);
+    assert.ok(reqs["asset"]);
+    assert.equal(reqs["scheme"], "exact");
   });
 });

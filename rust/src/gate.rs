@@ -6,7 +6,7 @@ use hyper::{Request, Response};
 
 use crate::config::{self, Config, FailMode, GateMode, Settlement};
 use crate::error::GateError;
-use crate::response::build_402;
+use crate::response::{build_402, Build402Params, build_requirements, build_settlement_response};
 use crate::routes::{RouteMatch, RouteMatcher};
 use crate::verify;
 
@@ -18,13 +18,10 @@ pub struct GateState {
     pub mode: GateMode,
     pub facilitator_url: String,
     pub start_time: std::time::Instant,
+    pub chain_id: u64,
 }
 
 /// Process an incoming request through the gate.
-///
-/// Returns the response to send back to the client.
-/// Body type is `Full<Bytes>` for generated responses; proxy responses
-/// are built in proxy.rs and returned through a different path.
 pub async fn handle_request(
     state: &GateState,
     req: &Request<hyper::body::Incoming>,
@@ -32,7 +29,6 @@ pub async fn handle_request(
     let path = req.uri().path();
     let method = req.method().as_str();
 
-    // Extract agent address for allowlist checks
     let agent = req.headers()
         .get("x-pay-agent")
         .and_then(|v| v.to_str().ok())
@@ -42,33 +38,21 @@ pub async fn handle_request(
 
     match route_match {
         RouteMatch::Free => Ok(GateDecision::ProxyFree),
-
         RouteMatch::Passthrough => Ok(GateDecision::ProxyFree),
-
         RouteMatch::Blocked => Err(GateError::Forbidden),
-
         RouteMatch::Allowlisted { agent } => {
             Ok(GateDecision::ProxyAllowlisted { agent })
         }
-
         RouteMatch::Paid { route, price, settlement } => {
-            // Check for dynamic pricing
-            let (final_price, final_settlement) = if let Some(ref endpoint) = route.price_endpoint {
-                match fetch_dynamic_price(&state.client, endpoint, path, method).await {
-                    Some(p) => {
-                        let s = route.settlement.unwrap_or_else(|| config::auto_settlement(&p));
-                        (p, s)
-                    }
-                    None if !price.is_empty() => (price, settlement),
-                    None => return Err(GateError::ServiceUnavailable),
-                }
-            } else {
-                (price, settlement)
-            };
+            let (final_price, final_settlement) = resolve_price(
+                state, route, &price, settlement, path, method,
+            ).await?;
 
             let payment_sig = req.headers()
                 .get("payment-signature")
                 .and_then(|v| v.to_str().ok());
+
+            let request_url = req.uri().to_string();
 
             match payment_sig {
                 None => {
@@ -76,14 +60,19 @@ pub async fn handle_request(
                         .get("accept")
                         .and_then(|v| v.to_str().ok());
                     let amount = config::price_to_micro_usdc(&final_price);
-                    let resp = build_402(
-                        &amount, final_settlement, &state.config.provider_address,
-                        &state.facilitator_url, &final_price, accept, None,
-                    );
+                    let resp = build_402(&Build402Params {
+                        amount: &amount, settlement: final_settlement,
+                        provider_address: &state.config.provider_address,
+                        facilitator_url: &state.facilitator_url,
+                        price_display: &final_price, accept, reason: None,
+                        request_url: &request_url, chain_id: state.chain_id,
+                    });
                     Ok(GateDecision::Respond(resp))
                 }
                 Some(sig) => {
-                    handle_verification(state, sig, &final_price, final_settlement, req).await
+                    handle_verification(
+                        state, sig, &final_price, final_settlement, req, &request_url,
+                    ).await
                 }
             }
         }
@@ -98,14 +87,35 @@ pub enum GateDecision {
     ProxyAllowlisted { agent: String },
     /// Proxy to origin with payment verification headers.
     ProxyVerified {
-        from: Option<String>,
+        payer: Option<String>,
         amount: String,
         settlement: String,
-        tab: Option<String>,
-        receipt: Option<String>,
+        receipt: String,
     },
     /// Return this response directly (402, 403, etc).
     Respond(Response<Full<Bytes>>),
+}
+
+async fn resolve_price(
+    state: &GateState,
+    route: &crate::config::RouteConfig,
+    price: &str,
+    settlement: Settlement,
+    path: &str,
+    method: &str,
+) -> Result<(String, Settlement), GateError> {
+    if let Some(ref endpoint) = route.price_endpoint {
+        match fetch_dynamic_price(&state.client, endpoint, path, method).await {
+            Some(p) => {
+                let s = route.settlement.unwrap_or_else(|| config::auto_settlement(&p));
+                Ok((p, s))
+            }
+            None if !price.is_empty() => Ok((price.to_string(), settlement)),
+            None => Err(GateError::ServiceUnavailable),
+        }
+    } else {
+        Ok((price.to_string(), settlement))
+    }
 }
 
 async fn handle_verification(
@@ -114,55 +124,60 @@ async fn handle_verification(
     price: &str,
     settlement: Settlement,
     req: &Request<hyper::body::Incoming>,
+    request_url: &str,
 ) -> Result<GateDecision, GateError> {
+    let amount = config::price_to_micro_usdc(price);
+
     if state.mode == GateMode::Mock {
+        let receipt = build_settlement_response(Some("0xmock"), state.chain_id);
         return Ok(GateDecision::ProxyVerified {
-            from: Some("0xmock".to_string()),
-            amount: config::price_to_micro_usdc(price),
+            payer: Some("0xmock".to_string()),
+            amount,
             settlement: settlement_str(settlement).to_string(),
-            tab: None,
-            receipt: None,
+            receipt,
         });
     }
 
-    let amount = config::price_to_micro_usdc(price);
+    let requirements = build_requirements(
+        &amount, settlement, &state.config.provider_address,
+        &state.facilitator_url, state.chain_id,
+    );
+
     let result = verify::verify_payment(
-        &state.client,
-        &state.facilitator_url,
-        payment_sig,
-        &amount,
-        settlement_str(settlement),
-        &state.config.provider_address,
+        &state.client, &state.facilitator_url, payment_sig, &requirements,
     ).await;
 
     match result {
-        None => {
-            // Facilitator unreachable
-            match state.config.fail_mode {
-                FailMode::Open => {
-                    tracing::warn!("Facilitator unreachable, fail_mode=open, passing through");
-                    Ok(GateDecision::ProxyFree)
-                }
-                FailMode::Closed => Err(GateError::ServiceUnavailable),
+        None => match state.config.fail_mode {
+            FailMode::Open => {
+                tracing::warn!("Facilitator unreachable, fail_mode=open, passing through");
+                Ok(GateDecision::ProxyFree)
             }
-        }
-        Some(resp) if !resp.valid => {
+            FailMode::Closed => Err(GateError::ServiceUnavailable),
+        },
+        Some(resp) if !resp.is_valid => {
             let accept = req.headers()
                 .get("accept")
                 .and_then(|v| v.to_str().ok());
-            let resp_402 = build_402(
-                &amount, settlement, &state.config.provider_address,
-                &state.facilitator_url, price, accept, resp.reason.as_deref(),
-            );
+            let resp_402 = build_402(&Build402Params {
+                amount: &amount, settlement,
+                provider_address: &state.config.provider_address,
+                facilitator_url: &state.facilitator_url,
+                price_display: price, accept,
+                reason: resp.invalid_reason.as_deref(),
+                request_url, chain_id: state.chain_id,
+            });
             Ok(GateDecision::Respond(resp_402))
         }
         Some(resp) => {
+            let receipt = build_settlement_response(
+                resp.payer.as_deref(), state.chain_id,
+            );
             Ok(GateDecision::ProxyVerified {
-                from: resp.from,
+                payer: resp.payer,
                 amount,
                 settlement: settlement_str(settlement).to_string(),
-                tab: resp.tab,
-                receipt: resp.receipt,
+                receipt,
             })
         }
     }

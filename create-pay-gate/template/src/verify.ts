@@ -1,17 +1,30 @@
-import type { VerifyRequest, VerifyResponse } from "./types";
+import type { PaymentRequirementsV2, VerifyRequestV2, VerifyResponseV2 } from "./types";
 
 const FACILITATOR_TIMEOUT_MS = 5_000;
 
 /**
- * Call the Pay facilitator's /verify endpoint.
+ * Call the Pay facilitator's /verify endpoint with v2 wire format.
+ * Decodes PAYMENT-SIGNATURE from base64 into a JSON payload.
  * Returns the verify response, or null if the facilitator is unreachable.
  */
 export async function verifyPayment(
   facilitatorUrl: string,
-  payment: string,
-  requirements: VerifyRequest["requirements"],
-): Promise<VerifyResponse | null> {
-  const body: VerifyRequest = { payment, requirements };
+  paymentHeader: string,
+  requirements: PaymentRequirementsV2,
+): Promise<VerifyResponseV2 | null> {
+  let paymentPayload: unknown;
+  try {
+    paymentPayload = JSON.parse(atob(paymentHeader));
+  } catch {
+    return null;
+  }
+
+  const body: VerifyRequestV2 = {
+    x402Version: 2,
+    paymentPayload,
+    paymentRequirements: requirements,
+  };
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FACILITATOR_TIMEOUT_MS);
 
@@ -28,7 +41,7 @@ export async function verifyPayment(
       return null;
     }
 
-    return (await resp.json()) as VerifyResponse;
+    return (await resp.json()) as VerifyResponseV2;
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
       console.error("Facilitator timeout after 5s");
@@ -43,7 +56,6 @@ export async function verifyPayment(
 
 /**
  * Check if the facilitator is reachable (for health endpoint).
- * Simple HEAD/GET to the facilitator base URL.
  */
 export async function checkFacilitatorHealth(facilitatorUrl: string): Promise<boolean> {
   const controller = new AbortController();

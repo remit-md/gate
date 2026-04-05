@@ -1,9 +1,9 @@
 import { Hono } from "hono";
-import type { Env, RouteConfig, PaymentRequirements } from "./types";
-import { loadRoutes, validateEnv, facilitatorUrl, priceToMicroUsdc, autoSettlement } from "./config";
+import type { Env, RouteConfig } from "./types";
+import { loadRoutes, validateEnv, facilitatorUrl, priceToMicroUsdc, autoSettlement, chainId, usdcAddress } from "./config";
 import { matchRoute, extractAgentAddress } from "./gate";
 import { verifyPayment, checkFacilitatorHealth } from "./verify";
-import { make402Response, make403Response, make429Response, make503Response } from "./response";
+import { make402Response, make403Response, make429Response, make503Response, buildRequirements, buildSettlementResponse } from "./response";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -66,11 +66,11 @@ app.post("/__pay/check", async (c) => {
   }
 
   // Paid route
-  return handlePaidRequest(c.env, match, paymentSig, c.req.header("accept"));
+  return handlePaidRequest(c.env, match, paymentSig, c.req.header("accept"), originalUri);
 });
 
 // ── CORS preflight — always pass through ────────────────────────
-app.options("*", (c) => {
+app.options("*", () => {
   return new Response(null, { status: 204 });
 });
 
@@ -128,19 +128,18 @@ app.all("*", async (c) => {
   }
 
   const paymentSig = c.req.header("payment-signature");
+  const chain = chainId(c.env);
+  const asset = usdcAddress(chain);
+  const facUrl = facilitatorUrl(c.env);
+  const amount = priceToMicroUsdc(price);
+  const reqs = buildRequirements(amount, settlement, c.env.PROVIDER_ADDRESS, facUrl, chain, asset);
 
   if (!paymentSig) {
-    return make402(c.env, price, settlement, c.req.header("accept"));
+    return make402Response(reqs, path, price, c.req.header("accept"));
   }
 
   // Verify payment with facilitator
-  const facUrl = facilitatorUrl(c.env);
-  const result = await verifyPayment(facUrl, paymentSig, {
-    scheme: "exact",
-    amount: priceToMicroUsdc(price),
-    settlement,
-    to: c.env.PROVIDER_ADDRESS,
-  });
+  const result = await verifyPayment(facUrl, paymentSig, reqs);
 
   // Facilitator unreachable
   if (!result) {
@@ -152,69 +151,47 @@ app.all("*", async (c) => {
   }
 
   // Verification failed
-  if (!result.valid) {
-    return make402(c.env, price, settlement, c.req.header("accept"), result.reason);
+  if (!result.isValid) {
+    return make402Response(reqs, path, price, c.req.header("accept"), result.invalidReason);
   }
 
   // Verification succeeded — proxy with payment headers
   const extraHeaders: Record<string, string> = {
     "X-Pay-Verified": "true",
-    "X-Pay-Amount": priceToMicroUsdc(price),
+    "X-Pay-Amount": amount,
     "X-Pay-Settlement": settlement,
   };
-  if (result.from) extraHeaders["X-Pay-From"] = result.from;
-  if (result.tab) extraHeaders["X-Pay-Tab"] = result.tab;
+  if (result.payer) extraHeaders["X-Pay-From"] = result.payer;
 
   const resp = await proxyToOrigin(c.env, c.req.raw, extraHeaders);
 
-  // Add receipt to response
-  if (result.receipt) {
-    const newResp = new Response(resp.body, resp);
-    newResp.headers.set("PAYMENT-RESPONSE", result.receipt);
-    return newResp;
-  }
-
-  return resp;
+  // Add v2 settlement response as PAYMENT-RESPONSE header
+  const receipt = buildSettlementResponse(result.payer, chain);
+  const newResp = new Response(resp.body, resp);
+  newResp.headers.set("PAYMENT-RESPONSE", receipt);
+  return newResp;
 });
 
 // ── Helpers ─────────────────────────────────────────────────────
-
-function make402(
-  env: Env,
-  price: string,
-  settlement: "direct" | "tab",
-  accept: string | null | undefined,
-  reason?: string,
-): Response {
-  const reqs: PaymentRequirements = {
-    scheme: "exact",
-    amount: priceToMicroUsdc(price),
-    settlement,
-    to: env.PROVIDER_ADDRESS,
-    facilitator: facilitatorUrl(env),
-    maxChargePerCall: priceToMicroUsdc(price),
-    network: "base",
-  };
-  return make402Response(reqs, price, accept, reason);
-}
 
 async function handlePaidRequest(
   env: Env,
   match: Extract<import("./types").RouteMatch, { kind: "paid" }>,
   paymentSig: string | null | undefined,
   accept: string | null | undefined,
+  requestUrl: string,
 ): Promise<Response> {
+  const chain = chainId(env);
+  const asset = usdcAddress(chain);
+  const facUrl = facilitatorUrl(env);
+  const amount = priceToMicroUsdc(match.price);
+  const reqs = buildRequirements(amount, match.settlement, env.PROVIDER_ADDRESS, facUrl, chain, asset);
+
   if (!paymentSig) {
-    return make402(env, match.price, match.settlement, accept);
+    return make402Response(reqs, requestUrl, match.price, accept);
   }
 
-  const facUrl = facilitatorUrl(env);
-  const result = await verifyPayment(facUrl, paymentSig, {
-    scheme: "exact",
-    amount: priceToMicroUsdc(match.price),
-    settlement: match.settlement,
-    to: env.PROVIDER_ADDRESS,
-  });
+  const result = await verifyPayment(facUrl, paymentSig, reqs);
 
   if (!result) {
     return env.FAIL_MODE === "open"
@@ -222,17 +199,19 @@ async function handlePaidRequest(
       : make503Response();
   }
 
-  if (!result.valid) {
-    return make402(env, match.price, match.settlement, accept, result.reason);
+  if (!result.isValid) {
+    return make402Response(reqs, requestUrl, match.price, accept, result.invalidReason);
   }
 
   const headers: Record<string, string> = {
     "X-Pay-Verified": "true",
-    "X-Pay-Amount": priceToMicroUsdc(match.price),
+    "X-Pay-Amount": amount,
     "X-Pay-Settlement": match.settlement,
   };
-  if (result.from) headers["X-Pay-From"] = result.from;
-  if (result.tab) headers["X-Pay-Tab"] = result.tab;
+  if (result.payer) headers["X-Pay-From"] = result.payer;
+
+  const receipt = buildSettlementResponse(result.payer, chain);
+  headers["PAYMENT-RESPONSE"] = receipt;
 
   return new Response(null, { status: 200, headers });
 }

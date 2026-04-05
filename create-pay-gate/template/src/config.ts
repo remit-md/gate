@@ -85,3 +85,21 @@ export function autoSettlement(price: string): "direct" | "tab" {
   const dollars = parseFloat(price);
   return dollars <= 1.0 ? "tab" : "direct";
 }
+
+/** Derive chain ID from facilitator URL. */
+export function chainId(env: Env): number {
+  const url = facilitatorUrl(env);
+  return url.includes("testnet") ? 84532 : 8453;
+}
+
+/** USDC contract address for a given chain. */
+export function usdcAddress(chain: number): string {
+  return chain === 8453
+    ? "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+    : "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
+}
+
+/** CAIP-2 network identifier. */
+export function caip2Network(chain: number): string {
+  return `eip155:${chain}`;
+}

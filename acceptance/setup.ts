@@ -30,13 +30,11 @@ export async function clearOriginRequests(): Promise<void> {
   await fetch(`${ORIGIN_URL}/__test/clear`);
 }
 
-/** Set mock facilitator default behavior. */
+/** Set mock facilitator default behavior (v2 format). */
 export async function setFacilitatorBehavior(behavior: {
-  valid: boolean;
-  reason?: string;
-  receipt?: string;
-  from?: string;
-  tab?: string;
+  isValid: boolean;
+  invalidReason?: string;
+  payer?: string;
 }): Promise<void> {
   await fetch(`${FACILITATOR_URL}/__mock/set-default`, {
     method: "POST",
@@ -48,7 +46,7 @@ export async function setFacilitatorBehavior(behavior: {
 /** Set mock facilitator override for a specific payment value. */
 export async function setFacilitatorOverride(
   payment: string,
-  behavior: { valid: boolean; reason?: string },
+  behavior: { isValid: boolean; invalidReason?: string },
 ): Promise<void> {
   await fetch(`${FACILITATOR_URL}/__mock/set-override`, {
     method: "POST",
@@ -79,9 +77,26 @@ export async function getFacilitatorCallCount(): Promise<number> {
   return data.count;
 }
 
+/** Get the last verify request received by the mock facilitator. */
+export async function getLastFacilitatorRequest(): Promise<Record<string, unknown> | null> {
+  const resp = await fetch(`${FACILITATOR_URL}/__mock/last-request`);
+  return resp.json() as Promise<Record<string, unknown> | null>;
+}
+
+/** Get all verify requests received by the mock facilitator. */
+export async function getFacilitatorRequests(): Promise<unknown[]> {
+  const resp = await fetch(`${FACILITATOR_URL}/__mock/requests`);
+  return resp.json() as Promise<unknown[]>;
+}
+
 /** Decode PAYMENT-REQUIRED header (base64 JSON). */
 export function decodePaymentRequired(header: string): Record<string, unknown> {
   return JSON.parse(atob(header));
+}
+
+/** Base64-encode a v2 payment payload for PAYMENT-SIGNATURE header. */
+export function encodePaymentSignature(payload: Record<string, unknown>): string {
+  return btoa(JSON.stringify(payload));
 }
 
 /** Helper: assert status code. */

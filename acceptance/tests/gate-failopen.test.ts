@@ -11,6 +11,7 @@ import {
   getOriginRequests,
   resetFacilitator,
   setFacilitatorDown,
+  encodePaymentSignature,
   assertStatus,
 } from "../setup.js";
 
@@ -30,8 +31,14 @@ describe("pay-gate fail-open mode", () => {
   it("proxies through when facilitator is down and fail_mode is open", async () => {
     await setFacilitatorDown();
 
+    const sig = encodePaymentSignature({
+      x402Version: 2,
+      accepted: { scheme: "exact" },
+      payload: { signature: "0xfailopen" },
+      extensions: {},
+    });
     const resp = await failopenGateRequest("/api/v1/premium/data", {
-      headers: { "PAYMENT-SIGNATURE": "some-payment-proof" },
+      headers: { "PAYMENT-SIGNATURE": sig },
     });
 
     // fail_mode=open → proxy to origin unpaid

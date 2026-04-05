@@ -6,71 +6,179 @@ use hyper::Response;
 use serde::Serialize;
 use serde_json::json;
 
-use crate::config::Settlement;
+use crate::config::{self, Settlement};
 use crate::error::GateError;
 
-/// x402 V2 payment requirements.
+/// x402 v2 top-level 402 response payload.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PaymentRequirements {
-    pub scheme: String,
-    pub amount: String,
-    pub settlement: String,
-    pub to: String,
-    pub facilitator: String,
-    pub max_charge_per_call: String,
-    pub network: String,
+pub struct PaymentRequired {
+    pub x402_version: u32,
+    pub resource: ResourceInfo,
+    pub accepts: Vec<PaymentRequirementsV2>,
+    pub extensions: serde_json::Value,
 }
 
-/// Build a 402 Payment Required response.
-pub fn build_402(
-    amount: &str,
-    settlement: Settlement,
-    to: &str,
-    facilitator: &str,
-    price_display: &str,
-    accept: Option<&str>,
-    reason: Option<&str>,
-) -> Response<Full<Bytes>> {
-    let settlement_str = match settlement {
+/// Resource info in a 402 response.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceInfo {
+    pub url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mime_type: Option<String>,
+}
+
+/// x402 v2 payment requirements (one entry in the `accepts` array).
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentRequirementsV2 {
+    pub scheme: String,
+    pub network: String,
+    pub amount: String,
+    pub asset: String,
+    pub pay_to: String,
+    pub max_timeout_seconds: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extra: Option<serde_json::Value>,
+}
+
+/// x402 v2 settlement response (base64-encoded in PAYMENT-RESPONSE header).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettlementResponse {
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_reason: Option<String>,
+    pub transaction: String,
+    pub network: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub payer: Option<String>,
+    pub extensions: serde_json::Value,
+}
+
+/// Parameters for building a 402 response.
+pub struct Build402Params<'a> {
+    pub amount: &'a str,
+    pub settlement: Settlement,
+    pub provider_address: &'a str,
+    pub facilitator_url: &'a str,
+    pub price_display: &'a str,
+    pub accept: Option<&'a str>,
+    pub reason: Option<&'a str>,
+    pub request_url: &'a str,
+    pub chain_id: u64,
+}
+
+/// Build a 402 Payment Required response with v2 wire format.
+#[allow(clippy::too_many_arguments)]
+pub fn build_402(p: &Build402Params<'_>) -> Response<Full<Bytes>> {
+    let settlement_str = match p.settlement {
         Settlement::Direct => "direct",
         Settlement::Tab => "tab",
     };
+    let network = config::caip2_network(p.chain_id);
+    let asset = config::usdc_address(p.chain_id).to_string();
 
-    let reqs = PaymentRequirements {
+    let extra = json!({
+        "name": "USDC",
+        "version": "2",
+        "facilitator": p.facilitator_url,
+        "settlement": settlement_str,
+    });
+
+    let reqs = PaymentRequirementsV2 {
         scheme: "exact".to_string(),
-        amount: amount.to_string(),
-        settlement: settlement_str.to_string(),
-        to: to.to_string(),
-        facilitator: facilitator.to_string(),
-        max_charge_per_call: amount.to_string(),
-        network: "base".to_string(),
+        network: network.clone(),
+        amount: p.amount.to_string(),
+        asset,
+        pay_to: p.provider_address.to_string(),
+        max_timeout_seconds: 60,
+        extra: Some(extra),
     };
 
-    let header_value = BASE64.encode(serde_json::to_string(&reqs).unwrap());
-    let wants_html = accept.is_some_and(|a| a.contains("text/html") && !a.contains("application/json"));
+    let payment_required = PaymentRequired {
+        x402_version: 2,
+        resource: ResourceInfo {
+            url: p.request_url.to_string(),
+            description: Some("Paid API endpoint".to_string()),
+            mime_type: Some("application/json".to_string()),
+        },
+        accepts: vec![reqs],
+        extensions: json!({}),
+    };
+
+    let header_value = BASE64.encode(
+        serde_json::to_string(&payment_required).unwrap_or_default(),
+    );
+    let wants_html =
+        p.accept.is_some_and(|a| a.contains("text/html") && !a.contains("application/json"));
 
     if wants_html {
-        let html = build_402_html(price_display);
+        let html = build_402_html(p.price_display);
         GateError::PaymentRequired {
             payment_required_header: header_value,
             body: html,
             content_type: "text/html; charset=utf-8".to_string(),
-        }.into_response()
+        }
+        .into_response()
     } else {
         let mut body = json!({
             "error": "payment_required",
-            "message": format!("This endpoint requires payment. ${} per request.", price_display),
+            "message": format!("This endpoint requires payment. ${} per request.", p.price_display),
             "docs": "https://pay-skill.com/gate",
         });
-        if let Some(r) = reason {
+        if let Some(r) = p.reason {
             body["reason"] = serde_json::Value::String(r.to_string());
         }
         GateError::PaymentRequired {
             payment_required_header: header_value,
             body: body.to_string(),
             content_type: "application/json".to_string(),
-        }.into_response()
+        }
+        .into_response()
+    }
+}
+
+/// Build a base64-encoded v2 SettlementResponse for the PAYMENT-RESPONSE header.
+pub fn build_settlement_response(payer: Option<&str>, chain_id: u64) -> String {
+    let resp = SettlementResponse {
+        success: true,
+        error_reason: None,
+        transaction: String::new(),
+        network: config::caip2_network(chain_id),
+        payer: payer.map(|s| s.to_string()),
+        extensions: json!({}),
+    };
+    BASE64.encode(serde_json::to_string(&resp).unwrap_or_default())
+}
+
+/// Build the v2 PaymentRequirementsV2 struct for use in verify requests.
+pub fn build_requirements(
+    amount: &str,
+    settlement: Settlement,
+    provider_address: &str,
+    facilitator_url: &str,
+    chain_id: u64,
+) -> PaymentRequirementsV2 {
+    let settlement_str = match settlement {
+        Settlement::Direct => "direct",
+        Settlement::Tab => "tab",
+    };
+    PaymentRequirementsV2 {
+        scheme: "exact".to_string(),
+        network: config::caip2_network(chain_id),
+        amount: amount.to_string(),
+        asset: config::usdc_address(chain_id).to_string(),
+        pay_to: provider_address.to_string(),
+        max_timeout_seconds: 60,
+        extra: Some(json!({
+            "name": "USDC",
+            "version": "2",
+            "facilitator": facilitator_url,
+            "settlement": settlement_str,
+        })),
     }
 }
 

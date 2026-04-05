@@ -1,6 +1,10 @@
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
+
+use crate::response::PaymentRequirementsV2;
 
 /// Build a shared facilitator HTTP client.
 pub fn build_client() -> Client {
@@ -13,49 +17,41 @@ pub fn build_client() -> Client {
         .expect("Failed to build HTTP client")
 }
 
+/// x402 v2 verify request body.
 #[derive(Debug, Serialize)]
-pub struct VerifyRequest {
-    pub payment: String,
-    pub requirements: VerifyRequirements,
+#[serde(rename_all = "camelCase")]
+pub struct VerifyRequestV2 {
+    pub x402_version: u32,
+    pub payment_payload: serde_json::Value,
+    pub payment_requirements: PaymentRequirementsV2,
 }
 
-#[derive(Debug, Serialize)]
-pub struct VerifyRequirements {
-    pub scheme: String,
-    pub amount: String,
-    pub settlement: String,
-    pub to: String,
-}
-
+/// x402 v2 verify response body.
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-pub struct VerifyResponse {
-    pub valid: bool,
-    pub reason: Option<String>,
-    pub receipt: Option<String>,
-    pub from: Option<String>,
-    pub tab: Option<String>,
-    pub amount: Option<String>,
-    pub settlement: Option<String>,
+#[serde(rename_all = "camelCase")]
+pub struct VerifyResponseV2 {
+    pub is_valid: bool,
+    pub invalid_reason: Option<String>,
+    pub payer: Option<String>,
 }
 
-/// Call facilitator /verify. Returns None if unreachable/timeout.
+/// Call facilitator /verify with v2 wire format.
+/// Decodes PAYMENT-SIGNATURE from base64 into a JSON value.
+/// Returns None if unreachable/timeout/parse error.
 pub async fn verify_payment(
     client: &Client,
     facilitator_url: &str,
-    payment: &str,
-    amount: &str,
-    settlement: &str,
-    to: &str,
-) -> Option<VerifyResponse> {
-    let body = VerifyRequest {
-        payment: payment.to_string(),
-        requirements: VerifyRequirements {
-            scheme: "exact".to_string(),
-            amount: amount.to_string(),
-            settlement: settlement.to_string(),
-            to: to.to_string(),
-        },
+    payment_header: &str,
+    requirements: &PaymentRequirementsV2,
+) -> Option<VerifyResponseV2> {
+    let payment_bytes = BASE64.decode(payment_header).ok()?;
+    let payment_payload: serde_json::Value =
+        serde_json::from_slice(&payment_bytes).ok()?;
+
+    let body = VerifyRequestV2 {
+        x402_version: 2,
+        payment_payload,
+        payment_requirements: requirements.clone(),
     };
 
     let url = format!("{}/verify", facilitator_url);
@@ -76,7 +72,7 @@ pub async fn verify_payment(
         return None;
     }
 
-    match resp.json::<VerifyResponse>().await {
+    match resp.json::<VerifyResponseV2>().await {
         Ok(v) => Some(v),
         Err(e) => {
             tracing::error!("Facilitator response parse error: {}", e);

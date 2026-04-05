@@ -1,10 +1,71 @@
-import type { PaymentRequirements, GateError } from "./types";
+import type { PaymentRequired, PaymentRequirementsV2, SettlementResponse, GateError } from "./types";
+import { caip2Network } from "./config";
 
 /**
- * Build the base64-encoded PAYMENT-REQUIRED header value.
+ * Build a base64-encoded v2 PAYMENT-REQUIRED header value.
  */
-export function buildPaymentRequiredHeader(reqs: PaymentRequirements): string {
-  return btoa(JSON.stringify(reqs));
+export function buildPaymentRequiredHeader(pr: PaymentRequired): string {
+  return btoa(JSON.stringify(pr));
+}
+
+/**
+ * Build a v2 PaymentRequired object.
+ */
+export function buildPaymentRequired(
+  reqs: PaymentRequirementsV2,
+  requestUrl: string,
+): PaymentRequired {
+  return {
+    x402Version: 2,
+    resource: {
+      url: requestUrl,
+      description: "Paid API endpoint",
+      mimeType: "application/json",
+    },
+    accepts: [reqs],
+    extensions: {},
+  };
+}
+
+/**
+ * Build a v2 PaymentRequirementsV2 object.
+ */
+export function buildRequirements(
+  amount: string,
+  settlement: "direct" | "tab",
+  providerAddress: string,
+  facilitatorUrl: string,
+  chain: number,
+  asset: string,
+): PaymentRequirementsV2 {
+  return {
+    scheme: "exact",
+    network: caip2Network(chain),
+    amount,
+    asset,
+    payTo: providerAddress,
+    maxTimeoutSeconds: 60,
+    extra: {
+      name: "USDC",
+      version: "2",
+      facilitator: facilitatorUrl,
+      settlement,
+    },
+  };
+}
+
+/**
+ * Build a base64-encoded v2 SettlementResponse for the PAYMENT-RESPONSE header.
+ */
+export function buildSettlementResponse(payer: string | undefined, chain: number): string {
+  const resp: SettlementResponse = {
+    success: true,
+    transaction: "",
+    network: caip2Network(chain),
+    payer,
+    extensions: {},
+  };
+  return btoa(JSON.stringify(resp));
 }
 
 /**
@@ -43,15 +104,17 @@ export function wantsHtml(accept: string | null | undefined): boolean {
 }
 
 /**
- * Build a full 402 Response with PAYMENT-REQUIRED header.
+ * Build a full 402 Response with v2 PAYMENT-REQUIRED header.
  */
 export function make402Response(
-  reqs: PaymentRequirements,
+  reqs: PaymentRequirementsV2,
+  requestUrl: string,
   price: string,
   accept: string | null | undefined,
   reason?: string,
 ): Response {
-  const header = buildPaymentRequiredHeader(reqs);
+  const pr = buildPaymentRequired(reqs, requestUrl);
+  const header = buildPaymentRequiredHeader(pr);
 
   if (wantsHtml(accept)) {
     return new Response(build402Html(price), {

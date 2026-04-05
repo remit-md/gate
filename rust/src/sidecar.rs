@@ -5,14 +5,11 @@ use hyper::{Request, Response};
 use crate::config::{self, Settlement};
 use crate::error::GateError;
 use crate::gate::GateState;
-use crate::response::build_402;
+use crate::response::{build_402, Build402Params, build_requirements, build_settlement_response};
 use crate::routes::RouteMatch;
 use crate::verify;
 
-/// Handle POST /__pay/check for sidecar mode (nginx auth_request, traefik forwardAuth, etc).
-///
-/// Reads X-Original-URI and X-Original-Method headers to determine the route.
-/// Returns 200 with X-Pay-* headers on success, 402 on payment required, 403 on blocked.
+/// Handle POST /__pay/check for sidecar mode.
 pub async fn handle_check(
     state: &GateState,
     req: &Request<hyper::body::Incoming>,
@@ -36,20 +33,18 @@ pub async fn handle_check(
 
     match route_match {
         RouteMatch::Free => ok_verified("free"),
-
         RouteMatch::Passthrough => ok_empty(),
-
         RouteMatch::Blocked => GateError::Forbidden.into_response(),
-
         RouteMatch::Allowlisted { ref agent } => {
             let mut resp = ok_empty();
             resp.headers_mut().insert("x-pay-verified", "allowlisted".parse().unwrap());
             resp.headers_mut().insert("x-pay-from", agent.parse().unwrap());
             resp
         }
-
         RouteMatch::Paid { route: _, price, settlement } => {
-            handle_paid_check(state, &price, settlement, payment_sig, req).await
+            handle_paid_check(
+                state, &price, settlement, payment_sig, req, original_uri,
+            ).await
         }
     }
 }
@@ -60,24 +55,28 @@ async fn handle_paid_check(
     settlement: Settlement,
     payment_sig: Option<&str>,
     req: &Request<hyper::body::Incoming>,
+    original_uri: &str,
 ) -> Response<Full<Bytes>> {
     let accept = req.headers().get("accept").and_then(|v| v.to_str().ok());
     let amount = config::price_to_micro_usdc(price);
-    let settlement_str = match settlement {
-        Settlement::Direct => "direct",
-        Settlement::Tab => "tab",
-    };
 
     let Some(sig) = payment_sig else {
-        return build_402(
-            &amount, settlement, &state.config.provider_address,
-            &state.facilitator_url, price, accept, None,
-        );
+        return build_402(&Build402Params {
+            amount: &amount, settlement,
+            provider_address: &state.config.provider_address,
+            facilitator_url: &state.facilitator_url,
+            price_display: price, accept, reason: None,
+            request_url: original_uri, chain_id: state.chain_id,
+        });
     };
 
+    let requirements = build_requirements(
+        &amount, settlement, &state.config.provider_address,
+        &state.facilitator_url, state.chain_id,
+    );
+
     let result = verify::verify_payment(
-        &state.client, &state.facilitator_url,
-        sig, &amount, settlement_str, &state.config.provider_address,
+        &state.client, &state.facilitator_url, sig, &requirements,
     ).await;
 
     let Some(result) = result else {
@@ -87,23 +86,31 @@ async fn handle_paid_check(
         };
     };
 
-    if !result.valid {
-        return build_402(
-            &amount, settlement, &state.config.provider_address,
-            &state.facilitator_url, price, accept, result.reason.as_deref(),
-        );
+    if !result.is_valid {
+        return build_402(&Build402Params {
+            amount: &amount, settlement,
+            provider_address: &state.config.provider_address,
+            facilitator_url: &state.facilitator_url,
+            price_display: price, accept,
+            reason: result.invalid_reason.as_deref(),
+            request_url: original_uri, chain_id: state.chain_id,
+        });
     }
+
+    let settlement_str = match settlement {
+        Settlement::Direct => "direct",
+        Settlement::Tab => "tab",
+    };
 
     let mut resp = ok_empty();
     resp.headers_mut().insert("x-pay-verified", "true".parse().unwrap());
     resp.headers_mut().insert("x-pay-amount", amount.parse().unwrap());
     resp.headers_mut().insert("x-pay-settlement", settlement_str.parse().unwrap());
-    if let Some(ref f) = result.from {
+    if let Some(ref f) = result.payer {
         resp.headers_mut().insert("x-pay-from", f.parse().unwrap());
     }
-    if let Some(ref t) = result.tab {
-        resp.headers_mut().insert("x-pay-tab", t.parse().unwrap());
-    }
+    let receipt = build_settlement_response(result.payer.as_deref(), state.chain_id);
+    resp.headers_mut().insert("payment-response", receipt.parse().unwrap());
     resp
 }
 

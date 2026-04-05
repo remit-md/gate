@@ -23,37 +23,52 @@ export interface Env {
   GLOBAL_ALLOWLIST?: string;
 }
 
-/** x402 V2 payment requirements (base64-encoded in PAYMENT-REQUIRED header). */
-export interface PaymentRequirements {
-  scheme: "exact";
-  amount: string;
-  settlement: "direct" | "tab";
-  to: string;
-  facilitator: string;
-  maxChargePerCall: string;
-  network: "base";
+/** x402 v2 top-level 402 response (base64-encoded in PAYMENT-REQUIRED header). */
+export interface PaymentRequired {
+  x402Version: 2;
+  resource: { url: string; description?: string; mimeType?: string };
+  accepts: PaymentRequirementsV2[];
+  extensions: Record<string, unknown>;
 }
 
-/** Facilitator /verify request body. */
-export interface VerifyRequest {
-  payment: string;
-  requirements: {
-    scheme: "exact";
-    amount: string;
-    settlement: "direct" | "tab";
-    to: string;
+/** x402 v2 payment requirements (one entry in the `accepts` array). */
+export interface PaymentRequirementsV2 {
+  scheme: "exact";
+  network: string;
+  amount: string;
+  asset: string;
+  payTo: string;
+  maxTimeoutSeconds: number;
+  extra?: {
+    name?: string;
+    version?: string;
+    facilitator?: string;
+    settlement?: string;
   };
 }
 
-/** Facilitator /verify response body. */
-export interface VerifyResponse {
-  valid: boolean;
-  reason?: string;
-  receipt?: string;
-  from?: string;
-  tab?: string;
-  amount?: string;
-  settlement?: string;
+/** x402 v2 facilitator /verify request body. */
+export interface VerifyRequestV2 {
+  x402Version: 2;
+  paymentPayload: unknown;
+  paymentRequirements: PaymentRequirementsV2;
+}
+
+/** x402 v2 facilitator /verify response body. */
+export interface VerifyResponseV2 {
+  isValid: boolean;
+  invalidReason?: string;
+  payer?: string;
+}
+
+/** x402 v2 settlement response (base64-encoded in PAYMENT-RESPONSE header). */
+export interface SettlementResponse {
+  success: boolean;
+  errorReason?: string;
+  transaction: string;
+  network: string;
+  payer?: string;
+  extensions: Record<string, unknown>;
 }
 
 /** Result of matching a request against route config. */
