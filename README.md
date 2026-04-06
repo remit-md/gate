@@ -41,10 +41,22 @@ docker run -v ./pay-gate.yaml:/etc/pay-gate/config.yaml -p 8402:8402 payskill/ga
 
 ```bash
 pay-gate start --sidecar
-# Configure your reverse proxy to auth_request -> http://127.0.0.1:8402/__pay/check
+# Configure your reverse proxy to subrequest http://127.0.0.1:8402/__pay/check
 ```
 
 See `examples/` for proxy-specific configs.
+
+### Sidecar Notes
+
+All five sidecar configs are tested end-to-end with live x402 payment flows.
+
+| Proxy | File | Notes |
+|-------|------|-------|
+| **nginx** | `nginx.conf` + `gate.js` | Requires njs module (`load_module modules/ngx_http_js_module.so`). Stock `auth_request` cannot forward 402. Add `subrequest_output_buffer_size 256k` for large API responses. |
+| **OpenResty** | `openresty.conf` | Lua `access_by_lua_block`. Works on all platforms including Windows (njs does not). |
+| **Traefik** | `traefik.yml` | `forwardAuth` handles 402 natively. Sends `X-Forwarded-Uri` (not `X-Original-URI`). |
+| **Caddy** | `Caddyfile` | `forward_auth` handles 402 natively. Use `copy_headers` for `Payment-Signature` (not `header_up`, which sends empty values). |
+| **Envoy** | `envoy.yml` | `ext_authz` with `path_prefix`. Requires `allowed_client_headers` for `payment-required` header passthrough. |
 
 ## Configuration
 
@@ -84,6 +96,12 @@ routes:
   - path: "/api/v1/admin/*"
     free: true
     allowlist: ["0xaaaa..."]
+  - path: "/weather"
+    price: "0.01"
+    proxy_rewrite: "/v1/forecast.json"   # CF Worker only: rewrite path to origin
+    proxy_params:                         # CF Worker only: inject default query params
+      key: "your-api-key"
+      days: "3"
 
 default_action: "passthrough"        # or "block" for unmatched routes
 fail_mode: "closed"                  # "closed" = 503 if facilitator down, "open" = pass through

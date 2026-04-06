@@ -250,7 +250,9 @@ async fn dispatch(
     if path == "/__pay/health" && method == hyper::Method::GET {
         return Ok(health::handle_health(state).await);
     }
-    if path == "/__pay/check" && method == hyper::Method::POST {
+    if (path == "/__pay/check" || path.starts_with("/__pay/check/"))
+        && (method == hyper::Method::POST || method == hyper::Method::GET)
+    {
         return Ok(sidecar::handle_check(state, &req).await);
     }
 

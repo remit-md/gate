@@ -90,7 +90,10 @@ app.all("*", async (c) => {
   const match = matchRoute(path, method, routes, c.env, agentAddr);
 
   // Free route — proxy directly
-  if (match.kind === "free" || match.kind === "passthrough") {
+  if (match.kind === "free") {
+    return proxyToOrigin(c.env, c.req.raw, undefined, match.route);
+  }
+  if (match.kind === "passthrough") {
     return proxyToOrigin(c.env, c.req.raw);
   }
 
@@ -145,7 +148,7 @@ app.all("*", async (c) => {
   if (!result) {
     if (c.env.FAIL_MODE === "open") {
       console.warn("Facilitator unreachable, fail_mode=open, passing through");
-      return proxyToOrigin(c.env, c.req.raw);
+      return proxyToOrigin(c.env, c.req.raw, undefined, match.route);
     }
     return make503Response();
   }
@@ -163,7 +166,7 @@ app.all("*", async (c) => {
   };
   if (result.payer) extraHeaders["X-Pay-From"] = result.payer;
 
-  const resp = await proxyToOrigin(c.env, c.req.raw, extraHeaders);
+  const resp = await proxyToOrigin(c.env, c.req.raw, extraHeaders, match.route);
 
   // Add v2 settlement response as PAYMENT-RESPONSE header
   const receipt = buildSettlementResponse(result.payer, chain);
@@ -220,12 +223,27 @@ async function proxyToOrigin(
   env: Env,
   req: Request,
   extraHeaders?: Record<string, string>,
+  route?: import("./types").RouteConfig,
 ): Promise<Response> {
   const url = new URL(req.url);
   const target = new URL(env.PROXY_TARGET);
   url.protocol = target.protocol;
   url.hostname = target.hostname;
   url.port = target.port;
+
+  // Apply route-level path rewrite (e.g. /weather → /v1/forecast.json)
+  if (route?.proxy_rewrite) {
+    url.pathname = route.proxy_rewrite;
+  }
+
+  // Inject route-level default query params (e.g. key=xxx&days=3)
+  if (route?.proxy_params) {
+    for (const [k, v] of Object.entries(route.proxy_params)) {
+      if (!url.searchParams.has(k)) {
+        url.searchParams.set(k, v);
+      }
+    }
+  }
 
   const headers = new Headers(req.headers);
   headers.delete("host");

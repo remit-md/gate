@@ -2,23 +2,30 @@
 #
 # Prerequisites:
 #   pay-gate start --sidecar  (listening on 127.0.0.1:8402)
+#
+# Caddy's forward_auth handles 402 natively — no workarounds needed.
+# The copy_headers directive forwards x402 headers between client and pay-gate.
+#
+# IMPORTANT: Use copy_headers for PAYMENT-SIGNATURE, not header_up.
+# header_up sends an empty value when the client omits the header,
+# which pay-gate interprets as an invalid payment attempt.
 
 api.example.com {
-	# Gate all /api/ routes through pay-gate
+	# Gate /api/ routes through pay-gate
 	@api path /api/*
 	handle @api {
 		forward_auth localhost:8402 {
 			uri /__pay/check
 			header_up X-Original-URI {uri}
 			header_up X-Original-Method {method}
-			header_up PAYMENT-SIGNATURE {header.PAYMENT-SIGNATURE}
 			copy_headers {
+				Payment-Required
+				Payment-Signature
+				Payment-Response
 				X-Pay-Verified
 				X-Pay-From
 				X-Pay-Amount
 				X-Pay-Settlement
-				X-Pay-Tab
-				PAYMENT-REQUIRED
 			}
 		}
 		reverse_proxy localhost:8080

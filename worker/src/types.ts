@@ -7,6 +7,10 @@ export interface RouteConfig {
   free?: boolean;
   allowlist?: string[];
   price_endpoint?: string;
+  /** Rewrite the path before proxying to origin. e.g. "/v1/forecast.json" */
+  proxy_rewrite?: string;
+  /** Default query params injected into every proxied request. e.g. {"key": "abc", "days": "3"} */
+  proxy_params?: Record<string, string>;
 }
 
 /** Top-level env bindings for the CF Worker. */
