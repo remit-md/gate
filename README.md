@@ -41,10 +41,10 @@ docker run -v ./pay-gate.yaml:/etc/pay-gate/config.yaml -p 8402:8402 payskill/ga
 
 ```bash
 pay-gate start --sidecar
-# Configure your reverse proxy to auth_request -> http://127.0.0.1:8402/__pay/check
+# Configure your reverse proxy to subrequest http://127.0.0.1:8402/__pay/check
 ```
 
-See `examples/` for proxy-specific configs.
+See `examples/` for proxy-specific configs. nginx requires the njs module (not `auth_request`, which cannot forward 402 responses).
 
 ## Configuration
 
