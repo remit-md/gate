@@ -32,3 +32,14 @@ fail_mode: "closed"
 log:
   level: "info"
   format: "json"
+
+# Optional: register this gate in the Pay discovery catalog.
+# Agents find your API via `pay discover`.
+# Remove this block or set discoverable: false to stay unlisted.
+discovery:
+  discoverable: true
+  base_url: "https://api.example.com"    # public URL of this gate
+  name: "My API"                         # max 60 chars
+  description: "Short description"       # max 200 chars
+  keywords: ["keyword1", "keyword2"]     # max 10, each max 30 chars
+  category: "data"                       # e.g. data, ai, media, compute
