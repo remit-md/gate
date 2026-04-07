@@ -30,6 +30,7 @@ pub fn handle_manifest(state: &GateState) -> Response<Full<Bytes>> {
             "keywords": d.keywords,
             "category": d.category,
             "website": d.website,
+            "docs_url": d.docs_url,
             "base_url": d.base_url,
         })
     });
