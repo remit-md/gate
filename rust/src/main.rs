@@ -4,6 +4,7 @@ mod config;
 mod error;
 mod gate;
 mod health;
+mod heartbeat;
 mod proxy;
 mod rate_limit;
 mod response;
@@ -179,6 +180,14 @@ async fn run_server(
             rate_limit::retain_recent(&vl);
         }
     });
+
+    // Start discovery heartbeat (P11) — sends on startup + every 24h
+    heartbeat::spawn(
+        verify::build_client(),
+        facilitator_url.to_string(),
+        config.clone(),
+        mode,
+    );
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     let listener = TcpListener::bind(addr).await.expect("Failed to bind");

@@ -143,9 +143,16 @@ async fn handle_verification(
         &state.facilitator_url, state.chain_id,
     );
 
+    // Extract domain from proxy target for volume tracking (P11)
+    let gate_domain = extract_domain(&state.config.proxy.target);
     let result = verify::verify_payment(
-        &state.client, &state.facilitator_url, payment_sig, &requirements,
-    ).await;
+        &state.client,
+        &state.facilitator_url,
+        payment_sig,
+        &requirements,
+        gate_domain.as_deref(),
+    )
+    .await;
 
     match result {
         None => match state.config.fail_mode {
@@ -211,4 +218,17 @@ async fn fetch_dynamic_price(
 
     let json: serde_json::Value = resp.json().await.ok()?;
     json.get("price")?.as_str().map(|s| s.to_string())
+}
+
+/// Extract domain from a URL (e.g. "https://api.weather.com" → "api.weather.com").
+fn extract_domain(url: &str) -> Option<String> {
+    let without_scheme = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))?;
+    let host = without_scheme.split('/').next()?;
+    let domain = host.split(':').next()?;
+    if domain.is_empty() {
+        return None;
+    }
+    Some(domain.to_lowercase())
 }

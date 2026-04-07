@@ -38,11 +38,13 @@ pub struct VerifyResponseV2 {
 /// Call facilitator /verify with v2 wire format.
 /// Decodes PAYMENT-SIGNATURE from base64 into a JSON value.
 /// Returns None if unreachable/timeout/parse error.
+/// `gate_domain` is sent as X-Gate-Domain header for volume tracking (P11).
 pub async fn verify_payment(
     client: &Client,
     facilitator_url: &str,
     payment_header: &str,
     requirements: &PaymentRequirementsV2,
+    gate_domain: Option<&str>,
 ) -> Option<VerifyResponseV2> {
     let payment_bytes = BASE64.decode(payment_header).ok()?;
     let payment_payload: serde_json::Value =
@@ -75,7 +77,11 @@ pub async fn verify_payment(
     };
 
     let url = format!("{}/verify", facilitator_url);
-    let resp = match client.post(&url).json(&body).send().await {
+    let mut req = client.post(&url).json(&body);
+    if let Some(domain) = gate_domain {
+        req = req.header("X-Gate-Domain", domain);
+    }
+    let resp = match req.send().await {
         Ok(r) => r,
         Err(e) => {
             if e.is_timeout() {

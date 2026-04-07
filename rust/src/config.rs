@@ -19,6 +19,25 @@ pub struct Config {
     pub fail_mode: FailMode,
     #[serde(default)]
     pub log: LogConfig,
+    #[serde(default)]
+    pub discovery: Option<DiscoveryConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DiscoveryConfig {
+    #[serde(default = "default_discoverable")]
+    pub discoverable: bool,
+    pub name: String,
+    pub description: String,
+    #[serde(default)]
+    pub keywords: Vec<String>,
+    pub category: String,
+    pub website: Option<String>,
+}
+
+fn default_discoverable() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -175,6 +194,33 @@ fn validate_config(config: &Config) -> Result<(), String> {
         }
         if let Some(ref url) = route.price_endpoint {
             validate_url(url, &format!("{}.price_endpoint", label))?;
+        }
+    }
+
+    if let Some(ref disc) = config.discovery {
+        if disc.discoverable {
+            if disc.name.is_empty() || disc.name.len() > 60 {
+                return Err("discovery.name: required, max 60 chars".to_string());
+            }
+            if disc.description.is_empty() || disc.description.len() > 200 {
+                return Err("discovery.description: required, max 200 chars".to_string());
+            }
+            if disc.keywords.len() > 10 {
+                return Err("discovery.keywords: max 10 keywords".to_string());
+            }
+            for kw in &disc.keywords {
+                if kw.len() > 30 {
+                    return Err(format!("discovery.keywords: '{}' exceeds 30 chars", kw));
+                }
+            }
+            if disc.category.is_empty() {
+                return Err("discovery.category: required".to_string());
+            }
+            if let Some(ref w) = disc.website {
+                if !w.starts_with("https://") {
+                    return Err("discovery.website: must use HTTPS".to_string());
+                }
+            }
         }
     }
 
