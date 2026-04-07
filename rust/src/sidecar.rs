@@ -88,9 +88,15 @@ async fn handle_paid_check(
         &state.facilitator_url, state.chain_id,
     );
 
+    let gate_domain = crate::gate::extract_domain(&state.config.proxy.target);
     let result = verify::verify_payment(
-        &state.client, &state.facilitator_url, sig, &requirements,
-    ).await;
+        &state.client,
+        &state.facilitator_url,
+        sig,
+        &requirements,
+        gate_domain.as_deref(),
+    )
+    .await;
 
     let Some(result) = result else {
         return match state.config.fail_mode {

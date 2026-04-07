@@ -184,8 +184,8 @@ async fn run_server(
     // Start discovery heartbeat (P11) — sends on startup + every 24h
     heartbeat::spawn(
         verify::build_client(),
-        facilitator_url.to_string(),
-        config.clone(),
+        state.facilitator_url.clone(),
+        state.config.clone(),
         mode,
     );
 

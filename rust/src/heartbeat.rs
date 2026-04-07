@@ -33,21 +33,8 @@ struct HeartbeatRoute {
     settlement: String,
 }
 
-/// Extract domain from proxy target URL.
-fn extract_domain(url: &str) -> Option<String> {
-    let without_scheme = url
-        .strip_prefix("https://")
-        .or_else(|| url.strip_prefix("http://"))?;
-    let host = without_scheme.split('/').next()?;
-    let domain = host.split(':').next()?;
-    if domain.is_empty() {
-        return None;
-    }
-    Some(domain.to_lowercase())
-}
-
 fn build_payload(config: &Config, discovery: &DiscoveryConfig) -> Option<HeartbeatPayload> {
-    let domain = extract_domain(&config.proxy.target)?;
+    let domain = crate::gate::extract_domain(&config.proxy.target)?;
 
     let routes: Vec<HeartbeatRoute> = config
         .routes

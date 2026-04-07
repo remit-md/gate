@@ -221,7 +221,7 @@ async fn fetch_dynamic_price(
 }
 
 /// Extract domain from a URL (e.g. "https://api.weather.com" → "api.weather.com").
-fn extract_domain(url: &str) -> Option<String> {
+pub fn extract_domain(url: &str) -> Option<String> {
     let without_scheme = url
         .strip_prefix("https://")
         .or_else(|| url.strip_prefix("http://"))?;
