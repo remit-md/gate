@@ -23,6 +23,8 @@ jobs:
         run: cargo clippy -- -D warnings
       - name: Test
         run: cargo test
+      - name: Bench compile check
+        run: cargo bench --no-run
 
   worker-typecheck:
     runs-on: ubuntu-latest

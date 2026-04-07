@@ -1,16 +1,5 @@
 #![deny(warnings)]
 
-mod config;
-mod error;
-mod gate;
-mod health;
-mod proxy;
-mod rate_limit;
-mod response;
-mod routes;
-mod sidecar;
-mod verify;
-
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -26,8 +15,15 @@ use hyper::{Request, Response};
 use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
 
-use crate::config::{GateMode, load_config};
-use crate::gate::{GateDecision, GateState};
+use pay_gate::config::{self, GateMode, load_config};
+use pay_gate::error;
+use pay_gate::gate::{self, GateDecision, GateState};
+use pay_gate::health;
+use pay_gate::proxy;
+use pay_gate::rate_limit;
+use pay_gate::routes;
+use pay_gate::sidecar;
+use pay_gate::verify;
 
 #[derive(Parser)]
 #[command(name = "pay-gate", version = "0.1.0")]
