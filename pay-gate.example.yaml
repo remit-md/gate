@@ -43,3 +43,4 @@ discovery:
   description: "Short description"       # max 200 chars
   keywords: ["keyword1", "keyword2"]     # max 10, each max 30 chars
   category: "data"                       # e.g. data, ai, media, compute
+  docs_url: "https://api.example.com/docs" # optional — OpenAPI, docs page, etc.

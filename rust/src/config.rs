@@ -37,6 +37,8 @@ pub struct DiscoveryConfig {
     pub keywords: Vec<String>,
     pub category: String,
     pub website: Option<String>,
+    /// URL to API documentation (OpenAPI spec, docs page, README, etc).
+    pub docs_url: Option<String>,
 }
 
 fn default_discoverable() -> bool {
