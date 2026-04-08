@@ -182,7 +182,15 @@ async fn run_server(
         }
     });
 
-    // Start discovery heartbeat (P11) — sends on startup + every 24h
+    // Testnet warning — loud and clear
+    if mode != GateMode::Production {
+        tracing::warn!("========================================================");
+        tracing::warn!("  TESTNET MODE — payments use worthless test USDC.");
+        tracing::warn!("  Use `pay-gate start` for production (mainnet).");
+        tracing::warn!("========================================================");
+    }
+
+    // Start discovery heartbeat (P11) — sends on startup + every 1h
     heartbeat::spawn(
         verify::build_client(),
         state.facilitator_url.clone(),

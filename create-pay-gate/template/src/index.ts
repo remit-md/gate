@@ -15,10 +15,14 @@ const rateCounts = new Map<string, { count: number; resetAt: number }>();
 app.get("/__pay/health", async (c) => {
   const start = Date.now();
   const url = facilitatorUrl(c.env);
+  const chain = chainId(c.env);
+  const network = chain === 8453 ? "mainnet" : "testnet";
   const reachable = await checkFacilitatorHealth(url);
   return c.json({
     status: reachable ? "ok" : "degraded",
     facilitator: reachable ? "reachable" : "unreachable",
+    network,
+    chain_id: chain,
     version: "0.1.0",
     uptime: Math.floor((Date.now() - start) / 1000),
   });
@@ -321,9 +325,21 @@ function isRateLimited(key: string, env: Env): boolean {
   return entry.count > limit;
 }
 
+function logNetworkWarning(env: Env): void {
+  const chain = chainId(env);
+  if (chain !== 8453) {
+    console.warn("========================================================");
+    console.warn("  TESTNET MODE — payments use worthless test USDC.");
+    console.warn("  Set FACILITATOR_URL to https://pay-skill.com/x402");
+    console.warn("  for production (mainnet).");
+    console.warn("========================================================");
+  }
+}
+
 export default {
   fetch: app.fetch,
   async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext) {
+    logNetworkWarning(env);
     await sendHeartbeat(env);
   },
 };

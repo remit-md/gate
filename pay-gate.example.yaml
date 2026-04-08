@@ -1,5 +1,12 @@
 version: 1
 
+# IMPORTANT: Network is determined by the start command:
+#   pay-gate start  → mainnet (real USDC, chain 8453)
+#   pay-gate dev    → testnet (worthless test USDC, chain 84532)
+#
+# Using `dev` in production means accepting worthless tokens for real API calls.
+# Always use `pay-gate start` for production deployments.
+
 provider_address: "0x1234567890abcdef1234567890abcdef12345678"
 
 proxy:
