@@ -7,6 +7,8 @@ export interface RouteConfig {
   free?: boolean;
   allowlist?: string[];
   price_endpoint?: string;
+  /** Free-form usage hint for agents. e.g. "?q={city}" or '{"prompt": "string"}' */
+  hint?: string;
   /** Rewrite the path before proxying to origin. e.g. "/v1/forecast.json" */
   proxy_rewrite?: string;
   /** Default query params injected into every proxied request. e.g. {"key": "abc", "days": "3"} */
@@ -25,6 +27,39 @@ export interface Env {
   RATE_LIMIT_PER_AGENT?: string;
   RATE_LIMIT_VERIFICATION?: string;
   GLOBAL_ALLOWLIST?: string;
+  /** Discovery config — set these to register in pay discover catalog. */
+  DISCOVERY_BASE_URL?: string;
+  DISCOVERY_NAME?: string;
+  DISCOVERY_DESCRIPTION?: string;
+  DISCOVERY_KEYWORDS?: string;
+  DISCOVERY_CATEGORY?: string;
+  DISCOVERY_DOCS_URL?: string;
+  DISCOVERY_WEBSITE?: string;
+}
+
+/** Heartbeat payload sent to facilitator for service discovery. */
+export interface HeartbeatPayload {
+  domain: string;
+  base_url: string;
+  provider_address: string;
+  name: string;
+  description: string;
+  keywords: string[];
+  category: string;
+  website?: string;
+  docs_url?: string;
+  routes: HeartbeatRoute[];
+  pricing: Record<string, unknown>;
+  settlement_mode: string;
+  gate_version: string;
+}
+
+export interface HeartbeatRoute {
+  path: string;
+  method: string;
+  price?: string;
+  settlement: string;
+  hint?: string;
 }
 
 /** x402 v2 top-level 402 response (base64-encoded in PAYMENT-REQUIRED header). */

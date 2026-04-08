@@ -4,6 +4,7 @@ import { loadRoutes, validateEnv, facilitatorUrl, priceToMicroUsdc, autoSettleme
 import { matchRoute, extractAgentAddress } from "./gate";
 import { verifyPayment, checkFacilitatorHealth } from "./verify";
 import { make402Response, make403Response, make429Response, make503Response, buildRequirements, buildSettlementResponse } from "./response";
+import { sendHeartbeat } from "./heartbeat";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -320,4 +321,9 @@ function isRateLimited(key: string, env: Env): boolean {
   return entry.count > limit;
 }
 
-export default app;
+export default {
+  fetch: app.fetch,
+  async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext) {
+    await sendHeartbeat(env);
+  },
+};

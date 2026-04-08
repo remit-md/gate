@@ -2,6 +2,11 @@ name = "pay-gate"
 main = "src/index.ts"
 compatibility_date = "2026-04-01"
 
+# Heartbeat cron — sends discovery heartbeat daily.
+# Only fires if DISCOVERY_BASE_URL is set.
+[triggers]
+crons = ["0 0 * * *"]
+
 [vars]
 PROVIDER_ADDRESS = "0x1234567890abcdef1234567890abcdef12345678"
 PROXY_TARGET = "https://api.example.com"
@@ -9,6 +14,14 @@ DEFAULT_ACTION = "passthrough"
 FAIL_MODE = "closed"
 FACILITATOR_URL = "https://pay-skill.com/x402"
 LOG_LEVEL = "info"
+
+# Optional: discovery config — set these to appear in `pay discover`.
+# DISCOVERY_BASE_URL = "https://api.example.com"
+# DISCOVERY_NAME = "My API"
+# DISCOVERY_DESCRIPTION = "Short description"
+# DISCOVERY_KEYWORDS = "keyword1,keyword2"
+# DISCOVERY_CATEGORY = "data"
+# DISCOVERY_DOCS_URL = "https://api.example.com/docs"
 
 [[kv_namespaces]]
 binding = "ROUTES"

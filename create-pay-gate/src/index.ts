@@ -88,6 +88,11 @@ function wranglerToml(name: string, provider: string, target: string): string {
 main = "src/index.ts"
 compatibility_date = "2026-04-01"
 
+# Heartbeat cron — sends discovery heartbeat daily.
+# Only fires if DISCOVERY_BASE_URL is set.
+[triggers]
+crons = ["0 0 * * *"]
+
 [vars]
 PROVIDER_ADDRESS = "${provider}"
 PROXY_TARGET = "${target}"
@@ -95,6 +100,13 @@ DEFAULT_ACTION = "passthrough"
 FAIL_MODE = "closed"
 FACILITATOR_URL = "https://pay-skill.com/x402"
 LOG_LEVEL = "info"
+
+# Optional: discovery config — set these to appear in \`pay discover\`.
+# DISCOVERY_BASE_URL = "${target}"
+# DISCOVERY_NAME = "${name}"
+# DISCOVERY_DESCRIPTION = "Short description of your API"
+# DISCOVERY_KEYWORDS = "keyword1,keyword2"
+# DISCOVERY_CATEGORY = "data"
 
 [[kv_namespaces]]
 binding = "ROUTES"
