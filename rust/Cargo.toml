@@ -11,7 +11,7 @@ hyper = { version = "1", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
 http-body-util = "0.1"
 bytes = "1"
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.13", features = ["json"] }
 governor = "0.10"
 globset = "0.4"
 tracing = "0.1"
