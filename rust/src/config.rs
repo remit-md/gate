@@ -70,6 +70,9 @@ pub struct RouteConfig {
     #[serde(default)]
     pub allowlist: Vec<String>,
     pub price_endpoint: Option<String>,
+    /// Free-form hint for agents: query params, body example, etc.
+    /// e.g. "?q={city}" or '{"prompt": "string"}'
+    pub hint: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, serde::Serialize)]

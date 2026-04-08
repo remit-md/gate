@@ -8,13 +8,16 @@ proxy:
 
 routes:
   - path: "/api/v1/premium/*"
+    method: "GET"
     price: "0.01"
     settlement: "tab"
+    hint: "?q={query}&limit=50"              # free-form hint for agents
 
   - path: "/api/v1/report"
     method: "POST"
     price: "5.00"
     settlement: "direct"
+    hint: '{"start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD"}'
 
   - path: "/api/v1/health"
     free: true

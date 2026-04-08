@@ -123,7 +123,7 @@ mod tests {
             vec![RouteConfig {
                 path: "/health".to_string(),
                 method: None, price: None, settlement: None,
-                free: true, allowlist: vec![], price_endpoint: None,
+                free: true, allowlist: vec![], price_endpoint: None, hint: None,
             }],
             DefaultAction::Block,
         );
@@ -138,7 +138,7 @@ mod tests {
                 path: "/api/v1/premium/*".to_string(),
                 method: None, price: Some("0.01".to_string()),
                 settlement: Some(Settlement::Tab), free: false,
-                allowlist: vec![], price_endpoint: None,
+                allowlist: vec![], price_endpoint: None, hint: None,
             }],
             DefaultAction::Block,
         );
@@ -174,7 +174,7 @@ mod tests {
                 method: Some("POST".to_string()),
                 price: Some("5.00".to_string()),
                 settlement: Some(Settlement::Direct), free: false,
-                allowlist: vec![], price_endpoint: None,
+                allowlist: vec![], price_endpoint: None, hint: None,
             }],
             DefaultAction::Passthrough,
         );
