@@ -30,9 +30,11 @@ struct HeartbeatPayload {
 #[derive(Serialize)]
 struct HeartbeatRoute {
     path: String,
-    method: Option<String>,
+    method: String,
     price: Option<String>,
     settlement: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hint: Option<String>,
 }
 
 fn build_payload(config: &Config, discovery: &DiscoveryConfig) -> Option<HeartbeatPayload> {
@@ -44,13 +46,14 @@ fn build_payload(config: &Config, discovery: &DiscoveryConfig) -> Option<Heartbe
         .filter(|r| !r.free)
         .map(|r| HeartbeatRoute {
             path: r.path.clone(),
-            method: r.method.clone(),
+            method: r.method.clone().unwrap_or_else(|| "*".to_string()),
             price: r.price.clone(),
             settlement: match r.settlement {
                 Some(Settlement::Direct) => "direct".to_string(),
                 Some(Settlement::Tab) => "tab".to_string(),
                 None => "auto".to_string(),
             },
+            hint: r.hint.clone(),
         })
         .collect();
 
