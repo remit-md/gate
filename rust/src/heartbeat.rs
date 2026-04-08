@@ -1,6 +1,6 @@
 //! Discovery heartbeat sender (P11).
 //!
-//! Sends service metadata to the facilitator on startup + every 24h.
+//! Sends service metadata to the facilitator on startup + every 1h.
 //! Non-blocking: failures are logged and retried next cycle.
 
 use std::time::Duration;
@@ -139,9 +139,9 @@ pub fn spawn(client: Client, facilitator_url: String, config: Config, mode: Gate
         // Send immediately on startup
         send_heartbeat(&client, &facilitator_url, &payload).await;
 
-        // Then every 24 hours
+        // Then every hour
         loop {
-            tokio::time::sleep(Duration::from_secs(86400)).await;
+            tokio::time::sleep(Duration::from_secs(3600)).await;
             send_heartbeat(&client, &facilitator_url, &payload).await;
         }
     });

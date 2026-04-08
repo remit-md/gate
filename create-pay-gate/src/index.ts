@@ -88,18 +88,23 @@ function wranglerToml(name: string, provider: string, target: string): string {
 main = "src/index.ts"
 compatibility_date = "2026-04-01"
 
-# Heartbeat cron — sends discovery heartbeat daily.
+# Heartbeat cron — sends discovery heartbeat hourly.
 # Only fires if DISCOVERY_BASE_URL is set.
 [triggers]
-crons = ["0 0 * * *"]
+crons = ["0 * * * *"]
 
 [vars]
 PROVIDER_ADDRESS = "${provider}"
 PROXY_TARGET = "${target}"
 DEFAULT_ACTION = "passthrough"
 FAIL_MODE = "closed"
-FACILITATOR_URL = "https://pay-skill.com/x402"
 LOG_LEVEL = "info"
+
+# IMPORTANT: FACILITATOR_URL controls which network your gate accepts payments on.
+#   Mainnet (REAL money):       https://pay-skill.com/x402         (default if omitted)
+#   Testnet (WORTHLESS tokens): https://testnet.pay-skill.com/x402
+# Setting testnet in production means accepting worthless tokens for real API calls.
+FACILITATOR_URL = "https://pay-skill.com/x402"
 
 # Optional: discovery config — set these to appear in \`pay discover\`.
 # DISCOVERY_BASE_URL = "${target}"

@@ -10,10 +10,16 @@ use crate::verify;
 pub async fn handle_health(state: &GateState) -> Response<Full<Bytes>> {
     let reachable = verify::check_health(&state.client, &state.facilitator_url).await;
     let uptime = state.start_time.elapsed().as_secs();
+    let network = match state.mode {
+        crate::config::GateMode::Production => "mainnet",
+        _ => "testnet",
+    };
 
     let body = json!({
         "status": if reachable { "ok" } else { "degraded" },
         "facilitator": if reachable { "reachable" } else { "unreachable" },
+        "network": network,
+        "chain_id": state.chain_id,
         "uptime": uptime,
         "version": "0.1.0",
     });
