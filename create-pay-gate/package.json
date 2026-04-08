@@ -17,7 +17,7 @@
   "keywords": ["x402", "pay", "payment", "gateway", "cloudflare", "workers"],
   "license": "BSL-1.1",
   "devDependencies": {
-    "typescript": "^5.5.0",
-    "@types/node": "^22.0.0"
+    "typescript": "^6.0.2",
+    "@types/node": "^25.5.2"
   }
 }
