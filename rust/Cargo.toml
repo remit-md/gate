@@ -3,7 +3,7 @@ name = "pay-gate"
 version = "0.1.0"
 edition = "2021"
 description = "x402 payment gateway — reverse proxy with Pay facilitator"
-repository = "https://github.com/remit-md/gate"
+repository = "https://github.com/pay-skill/gate"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }

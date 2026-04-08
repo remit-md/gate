@@ -89,8 +89,8 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/remit-md/gate:${{ github.ref_name }}
-            ghcr.io/remit-md/gate:latest
+            ghcr.io/pay-skill/gate:${{ github.ref_name }}
+            ghcr.io/pay-skill/gate:latest
 
   release:
     runs-on: ubuntu-latest
