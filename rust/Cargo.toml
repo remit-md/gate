@@ -3,7 +3,11 @@ name = "pay-gate"
 version = "0.1.0"
 edition = "2021"
 description = "x402 payment gateway — reverse proxy with Pay facilitator"
+license = "BSL-1.1"
 repository = "https://github.com/pay-skill/gate"
+homepage = "https://pay-skill.com/docs/gate/"
+keywords = ["x402", "payment", "gateway", "proxy", "usdc"]
+categories = ["web-programming::http-server", "command-line-utilities"]
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
