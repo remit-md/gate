@@ -23,6 +23,17 @@ clap = { version = "4", features = ["derive", "env"] }
 base64 = "0.22"
 nonzero_ext = "0.3"
 
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/pay-gate-{ target-family }-{ target-arch }{ binary-ext }"
+pkg-fmt = "bin"
+
+[package.metadata.binstall.overrides]
+x86_64-unknown-linux-gnu = { pkg-url = "{ repo }/releases/download/v{ version }/pay-gate-linux-amd64" }
+aarch64-unknown-linux-gnu = { pkg-url = "{ repo }/releases/download/v{ version }/pay-gate-linux-arm64" }
+x86_64-apple-darwin = { pkg-url = "{ repo }/releases/download/v{ version }/pay-gate-macos-amd64" }
+aarch64-apple-darwin = { pkg-url = "{ repo }/releases/download/v{ version }/pay-gate-macos-arm64" }
+x86_64-pc-windows-msvc = { pkg-url = "{ repo }/releases/download/v{ version }/pay-gate-windows-amd64.exe" }
+
 [profile.release]
 strip = true
 lto = true
