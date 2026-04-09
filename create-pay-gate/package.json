@@ -15,7 +15,14 @@
     "typecheck": "tsc --noEmit"
   },
   "keywords": ["x402", "pay", "payment", "gateway", "cloudflare", "workers"],
+  "author": "pay-skill",
   "license": "BSL-1.1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pay-skill/gate.git",
+    "directory": "create-pay-gate"
+  },
+  "homepage": "https://pay-skill.com/docs/gate/",
   "devDependencies": {
     "typescript": "^6.0.2",
     "@types/node": "^25.5.2"
