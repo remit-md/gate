@@ -1,6 +1,6 @@
 [package]
 name = "pay-gate"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 description = "x402 payment gateway — reverse proxy with Pay facilitator"
 license = "BSL-1.1"
