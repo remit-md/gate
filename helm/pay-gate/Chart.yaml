@@ -1,0 +1,17 @@
+apiVersion: v2
+name: pay-gate
+description: x402 payment gateway — stateless reverse proxy gating HTTP APIs via x402 payments
+type: application
+version: 0.1.0
+appVersion: "0.3.0"
+home: https://github.com/pay-skill/gate
+sources:
+  - https://github.com/pay-skill/gate
+keywords:
+  - x402
+  - payments
+  - proxy
+  - gateway
+maintainers:
+  - name: pay-skill
+    url: https://github.com/pay-skill
