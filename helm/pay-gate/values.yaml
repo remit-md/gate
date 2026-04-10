@@ -1,0 +1,44 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/pay-skill/gate
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8402
+
+resources:
+  limits:
+    memory: 128Mi
+    cpu: 100m
+  requests:
+    memory: 64Mi
+    cpu: 50m
+
+env:
+  FACILITATOR_URL: "https://pay-skill.com/x402"
+
+# Full pay-gate.yaml content mounted into the container.
+# Adjust provider_address, proxy.target, and routes for your deployment.
+config: |
+  version: 1
+  provider_address: "0x0000000000000000000000000000000000000000"
+  proxy:
+    target: "http://backend:8080"
+    timeout: 30s
+  routes:
+    - path: "/api/v1/*"
+      method: "GET"
+      price: "0.01"
+      settlement: "tab"
+  default_action: "passthrough"
+  fail_mode: "closed"
+  log:
+    level: "info"
+    format: "json"
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

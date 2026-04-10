@@ -144,6 +144,29 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+  helm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.17.3
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io --username ${{ github.actor }} --password-stdin
+
+      - name: Package chart
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          helm package helm/pay-gate --version "$VERSION" --app-version "$VERSION"
+
+      - name: Push to OCI registry
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          helm push "pay-gate-${VERSION}.tgz" oci://ghcr.io/pay-skill/charts
+
   release:
     runs-on: ubuntu-latest
     needs: [build, docker]
