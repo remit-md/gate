@@ -97,7 +97,7 @@ jobs:
         if: env.DOCKER_TOKEN != ''
         uses: docker/login-action@v4
         with:
-          username: payskllhq
+          username: payskillhq
           password: ${{ secrets.DOCKER_TOKEN }}
         env:
           DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
@@ -109,8 +109,8 @@ jobs:
           context: .
           push: true
           tags: |
-            payskllhq/gate:${{ github.ref_name }}
-            payskllhq/gate:latest
+            payskillhq/gate:${{ github.ref_name }}
+            payskillhq/gate:latest
         env:
           DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
 
