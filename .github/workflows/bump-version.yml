@@ -47,11 +47,14 @@ jobs:
       - name: Update worker/package.json
         run: jq '.version = "${{ steps.next.outputs.version }}"' worker/package.json > tmp.json && mv tmp.json worker/package.json
 
+      - name: Update create-pay-gate/package.json
+        run: jq '.version = "${{ steps.next.outputs.version }}"' create-pay-gate/package.json > tmp.json && mv tmp.json create-pay-gate/package.json
+
       - name: Commit and tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add rust/Cargo.toml worker/package.json
+          git add rust/Cargo.toml worker/package.json create-pay-gate/package.json
           git commit -m "release: v${{ steps.next.outputs.version }}"
           git tag "v${{ steps.next.outputs.version }}"
           git push origin main --tags
