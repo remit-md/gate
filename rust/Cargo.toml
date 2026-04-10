@@ -3,6 +3,7 @@ name = "pay-gate"
 version = "0.1.7"
 edition = "2021"
 description = "x402 payment gateway — reverse proxy with Pay facilitator"
+authors = ["Agent Payment Protocol Infrastructure Inc."]
 license-file = "LICENSE"
 repository = "https://github.com/pay-skill/gate"
 homepage = "https://pay-skill.com/docs/gate/"
