@@ -84,6 +84,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: payskllhq
+          password: ${{ secrets.DOCKER_TOKEN }}
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v7
         with:
@@ -92,6 +98,8 @@ jobs:
           tags: |
             ghcr.io/pay-skill/gate:${{ github.ref_name }}
             ghcr.io/pay-skill/gate:latest
+            payskllhq/gate:${{ github.ref_name }}
+            payskllhq/gate:latest
 
   crates-io:
     runs-on: ubuntu-latest
