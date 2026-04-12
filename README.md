@@ -1,6 +1,6 @@
 # pay-gate
 
-Drop-in x402 payment gateway for any HTTP API. Deploy in front of your service, define pricing per route, and every request is gated via x402 with [Pay](https://pay-skill.com) as the facilitator.
+Drop-in x402 payment gateway for any HTTP API. Part of [Pay](https://pay-skill.com) -- the complete x402 payment stack for AI agents. USDC on Base. Deploy in front of your service, define pricing per route, and every request is gated via x402 with Pay as the facilitator.
 
 ```
 Agent ──> pay-gate ──> Your API
@@ -196,3 +196,14 @@ Override per route with `settlement: "direct"` or `settlement: "tab"`.
 ## License
 
 BSL-1.1 (converts to Apache-2.0 on 2036-04-03).
+
+## Part of Pay
+
+Pay is the complete x402 payment stack -- gateway, facilitator, SDKs, CLI, and MCP server -- that lets AI agents pay for APIs with USDC on Base.
+
+- [Documentation](https://pay-skill.com/docs/)
+- [Architecture](https://pay-skill.com/docs/architecture)
+- [SDK](https://github.com/pay-skill/pay-sdk) -- Python + TypeScript
+- [CLI](https://github.com/pay-skill/pay-cli) -- Command-line tool
+- [MCP Server](https://github.com/pay-skill/mcp) -- Claude Desktop / Cursor / VS Code
+- [Protocol](https://github.com/pay-skill/pay-protocol) -- Smart contracts
