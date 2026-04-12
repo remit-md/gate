@@ -1,7 +1,7 @@
 {
   "name": "create-pay-gate",
   "version": "0.1.7",
-  "description": "Create a pay-gate x402 payment gateway for Cloudflare Workers",
+  "description": "Scaffold a pay-gate x402 payment gateway. Monetizes any HTTP API for AI agents. Part of Pay. USDC on Base.",
   "type": "module",
   "bin": {
     "create-pay-gate": "./dist/index.js"
