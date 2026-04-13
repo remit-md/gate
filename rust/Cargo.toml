@@ -1,6 +1,6 @@
 [package]
 name = "pay-gate"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 description = "x402 payment gateway. Monetizes any HTTP API for AI agents. Part of the Pay x402 stack. USDC on Base."
 authors = ["Agent Payment Protocol Infrastructure Inc."]
