@@ -63,15 +63,17 @@ pub async fn handle_request(
                     let resp = build_402(&Build402Params {
                         amount: &amount, settlement: final_settlement,
                         provider_address: &state.config.provider_address,
-                        facilitator_url: &state.facilitator_url,
                         price_display: &final_price, accept, reason: None,
                         request_url: &request_url, chain_id: state.chain_id,
+                        description: route.description.as_deref(),
+                        mime_type: route.mime_type.as_deref(),
                     });
                     Ok(GateDecision::Respond(resp))
                 }
                 Some(sig) => {
                     handle_verification(
                         state, sig, &final_price, final_settlement, req, &request_url,
+                        route.description.as_deref(), route.mime_type.as_deref(),
                     ).await
                 }
             }
@@ -125,6 +127,8 @@ async fn handle_verification(
     settlement: Settlement,
     req: &Request<hyper::body::Incoming>,
     request_url: &str,
+    description: Option<&str>,
+    mime_type: Option<&str>,
 ) -> Result<GateDecision, GateError> {
     let amount = config::price_to_micro_usdc(price);
 
@@ -140,7 +144,7 @@ async fn handle_verification(
 
     let requirements = build_requirements(
         &amount, settlement, &state.config.provider_address,
-        &state.facilitator_url, state.chain_id,
+        state.chain_id,
     );
 
     // Extract domain from proxy target for volume tracking (P11)
@@ -169,10 +173,10 @@ async fn handle_verification(
             let resp_402 = build_402(&Build402Params {
                 amount: &amount, settlement,
                 provider_address: &state.config.provider_address,
-                facilitator_url: &state.facilitator_url,
                 price_display: price, accept,
                 reason: resp.invalid_reason.as_deref(),
                 request_url, chain_id: state.chain_id,
+                description, mime_type,
             });
             Ok(GateDecision::Respond(resp_402))
         }

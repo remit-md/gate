@@ -28,6 +28,52 @@ app.get("/__pay/health", async (c) => {
   });
 });
 
+// ── x402 well-known descriptor (IETF draft) ────────────────────
+app.get("/.well-known/x402", async (c) => {
+  let routes: RouteConfig[];
+  try {
+    validateEnv(c.env);
+    routes = await loadRoutes(c.env);
+  } catch (err) {
+    return c.json({ error: "config_error", message: String(err) }, 500);
+  }
+
+  const chain = chainId(c.env);
+  const asset = usdcAddress(chain);
+  const network = `eip155:${chain}`;
+
+  const endpoints = routes
+    .filter((r) => !r.free && r.price)
+    .map((r) => {
+      const settlement = r.settlement || autoSettlement(r.price!);
+      const entry: Record<string, unknown> = {
+        path: r.path,
+        method: (r.method || "GET").toUpperCase(),
+        paymentRequirements: {
+          scheme: "exact",
+          network,
+          amount: priceToMicroUsdc(r.price!),
+          asset,
+          payTo: c.env.PROVIDER_ADDRESS,
+          maxTimeoutSeconds: 60,
+          extra: { settlement },
+        },
+      };
+      if (r.description) entry.description = r.description;
+      if (r.mime_type) entry.mimeType = r.mime_type;
+      if (r.hint) entry.hint = r.hint;
+      return entry;
+    });
+
+  return c.json({
+    x402Version: 2,
+    payTo: c.env.PROVIDER_ADDRESS,
+    network,
+    asset,
+    endpoints,
+  });
+});
+
 // ── Sidecar check endpoint ──────────────────────────────────────
 app.post("/__pay/check", async (c) => {
   const originalUri = c.req.header("x-original-uri") || "/";
@@ -140,10 +186,11 @@ app.all("*", async (c) => {
   const asset = usdcAddress(chain);
   const facUrl = facilitatorUrl(c.env);
   const amount = priceToMicroUsdc(price);
-  const reqs = buildRequirements(amount, settlement, c.env.PROVIDER_ADDRESS, facUrl, chain, asset);
+  const reqs = buildRequirements(amount, settlement, c.env.PROVIDER_ADDRESS, chain, asset);
 
   if (!paymentSig) {
-    return make402Response(reqs, path, price, c.req.header("accept"));
+    return make402Response(reqs, path, price, c.req.header("accept"),
+      undefined, match.route.description, match.route.mime_type);
   }
 
   // Verify payment with facilitator
@@ -160,7 +207,8 @@ app.all("*", async (c) => {
 
   // Verification failed
   if (!result.isValid) {
-    return make402Response(reqs, path, price, c.req.header("accept"), result.invalidReason);
+    return make402Response(reqs, path, price, c.req.header("accept"),
+      result.invalidReason, match.route.description, match.route.mime_type);
   }
 
   // Verification succeeded — proxy with payment headers
@@ -193,10 +241,11 @@ async function handlePaidRequest(
   const asset = usdcAddress(chain);
   const facUrl = facilitatorUrl(env);
   const amount = priceToMicroUsdc(match.price);
-  const reqs = buildRequirements(amount, match.settlement, env.PROVIDER_ADDRESS, facUrl, chain, asset);
+  const reqs = buildRequirements(amount, match.settlement, env.PROVIDER_ADDRESS, chain, asset);
 
   if (!paymentSig) {
-    return make402Response(reqs, requestUrl, match.price, accept);
+    return make402Response(reqs, requestUrl, match.price, accept,
+      undefined, match.route.description, match.route.mime_type);
   }
 
   const result = await verifyPayment(facUrl, paymentSig, reqs);
@@ -208,7 +257,8 @@ async function handlePaidRequest(
   }
 
   if (!result.isValid) {
-    return make402Response(reqs, requestUrl, match.price, accept, result.invalidReason);
+    return make402Response(reqs, requestUrl, match.price, accept,
+      result.invalidReason, match.route.description, match.route.mime_type);
   }
 
   const headers: Record<string, string> = {

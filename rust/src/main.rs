@@ -275,6 +275,9 @@ async fn dispatch(
     if path == "/__pay/manifest" && method == hyper::Method::GET {
         return Ok(manifest::handle_manifest(state));
     }
+    if path == "/.well-known/x402" && method == hyper::Method::GET {
+        return Ok(manifest::handle_well_known_x402(state));
+    }
     if (path == "/__pay/check" || path.starts_with("/__pay/check/"))
         && (method == hyper::Method::POST || method == hyper::Method::GET)
     {

@@ -73,6 +73,10 @@ pub struct RouteConfig {
     /// Free-form hint for agents: query params, body example, etc.
     /// e.g. "?q={city}" or '{"prompt": "string"}'
     pub hint: Option<String>,
+    /// Resource description for x402 402 response. e.g. "Weather forecast data"
+    pub description: Option<String>,
+    /// Response MIME type for x402 402 response. e.g. "application/json"
+    pub mime_type: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, serde::Serialize)]

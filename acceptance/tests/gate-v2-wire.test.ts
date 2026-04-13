@@ -98,22 +98,23 @@ describe("x402 v2 wire format compliance", () => {
     assert.ok(extra["settlement"] === "tab" || extra["settlement"] === "direct");
   });
 
-  it("accepts[0].extra.facilitator is a valid URL", async () => {
+  it("accepts[0].extra does NOT contain facilitator (server-side only)", async () => {
     const resp = await gateRequest("/api/v1/premium/data");
     assertStatus(resp, 402);
     const decoded = decodePaymentRequired(resp.headers.get("payment-required")!);
     const reqs = (decoded["accepts"] as Record<string, unknown>[])[0]!;
     const extra = reqs["extra"] as Record<string, unknown>;
-    assert.ok((extra["facilitator"] as string).startsWith("http"));
+    assert.strictEqual(extra["facilitator"], undefined);
   });
 
-  it("accepts[0].extra.name is 'USDC'", async () => {
+  it("accepts[0].extra does NOT contain name or version (redundant)", async () => {
     const resp = await gateRequest("/api/v1/premium/data");
     assertStatus(resp, 402);
     const decoded = decodePaymentRequired(resp.headers.get("payment-required")!);
     const reqs = (decoded["accepts"] as Record<string, unknown>[])[0]!;
     const extra = reqs["extra"] as Record<string, unknown>;
-    assert.equal(extra["name"], "USDC");
+    assert.strictEqual(extra["name"], undefined);
+    assert.strictEqual(extra["version"], undefined);
   });
 
   it("resource.url contains the requested path", async () => {
@@ -124,12 +125,13 @@ describe("x402 v2 wire format compliance", () => {
     assert.ok((resource["url"] as string).includes("/api/v1/premium/data"));
   });
 
-  it("resource.mimeType is 'application/json'", async () => {
+  it("resource.mimeType is omitted when not configured on route", async () => {
     const resp = await gateRequest("/api/v1/premium/data");
     assertStatus(resp, 402);
     const decoded = decodePaymentRequired(resp.headers.get("payment-required")!);
     const resource = decoded["resource"] as Record<string, unknown>;
-    assert.equal(resource["mimeType"], "application/json");
+    // mimeType is only present when explicitly configured per route
+    assert.ok(resource["mimeType"] === undefined || typeof resource["mimeType"] === "string");
   });
 
   it("extensions is a plain object", async () => {
@@ -138,6 +140,44 @@ describe("x402 v2 wire format compliance", () => {
     const decoded = decodePaymentRequired(resp.headers.get("payment-required")!);
     assert.ok(typeof decoded["extensions"] === "object");
     assert.ok(!Array.isArray(decoded["extensions"]));
+  });
+
+  // ── .well-known/x402 descriptor tests ─────────────────────────
+
+  it("GET /.well-known/x402 returns x402Version 2", async () => {
+    const resp = await gateRequest("/.well-known/x402");
+    assertStatus(resp, 200);
+    const body = await resp.json() as Record<string, unknown>;
+    assert.strictEqual(body["x402Version"], 2);
+  });
+
+  it("/.well-known/x402 includes payTo, network, asset", async () => {
+    const resp = await gateRequest("/.well-known/x402");
+    assertStatus(resp, 200);
+    const body = await resp.json() as Record<string, unknown>;
+    assert.ok(body["payTo"]);
+    assert.match(body["network"] as string, /^eip155:\d+$/);
+    assert.match(body["asset"] as string, /^0x[0-9a-fA-F]{40}$/);
+  });
+
+  it("/.well-known/x402 endpoints have paymentRequirements", async () => {
+    const resp = await gateRequest("/.well-known/x402");
+    assertStatus(resp, 200);
+    const body = await resp.json() as Record<string, unknown>;
+    const endpoints = body["endpoints"] as Record<string, unknown>[];
+    assert.ok(Array.isArray(endpoints));
+    if (endpoints.length > 0) {
+      const ep = endpoints[0]!;
+      assert.ok(ep["path"]);
+      const reqs = ep["paymentRequirements"] as Record<string, unknown>;
+      assert.ok(reqs);
+      assert.equal(reqs["scheme"], "exact");
+      assert.match(reqs["network"] as string, /^eip155:\d+$/);
+      const extra = reqs["extra"] as Record<string, unknown>;
+      assert.ok(extra["settlement"] === "direct" || extra["settlement"] === "tab");
+      // No facilitator in extra
+      assert.strictEqual(extra["facilitator"], undefined);
+    }
   });
 
   // ── Verify request format tests ───────────────────────────────

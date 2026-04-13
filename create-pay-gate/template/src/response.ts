@@ -14,14 +14,15 @@ export function buildPaymentRequiredHeader(pr: PaymentRequired): string {
 export function buildPaymentRequired(
   reqs: PaymentRequirementsV2,
   requestUrl: string,
+  description?: string,
+  mimeType?: string,
 ): PaymentRequired {
+  const resource: PaymentRequired["resource"] = { url: requestUrl };
+  if (description) resource.description = description;
+  if (mimeType) resource.mimeType = mimeType;
   return {
     x402Version: 2,
-    resource: {
-      url: requestUrl,
-      description: "Paid API endpoint",
-      mimeType: "application/json",
-    },
+    resource,
     accepts: [reqs],
     extensions: {},
   };
@@ -34,7 +35,6 @@ export function buildRequirements(
   amount: string,
   settlement: "direct" | "tab",
   providerAddress: string,
-  facilitatorUrl: string,
   chain: number,
   asset: string,
 ): PaymentRequirementsV2 {
@@ -45,12 +45,7 @@ export function buildRequirements(
     asset,
     payTo: providerAddress,
     maxTimeoutSeconds: 60,
-    extra: {
-      name: "USDC",
-      version: "2",
-      facilitator: facilitatorUrl,
-      settlement,
-    },
+    extra: { settlement },
   };
 }
 
@@ -112,8 +107,10 @@ export function make402Response(
   price: string,
   accept: string | null | undefined,
   reason?: string,
+  description?: string,
+  mimeType?: string,
 ): Response {
-  const pr = buildPaymentRequired(reqs, requestUrl);
+  const pr = buildPaymentRequired(reqs, requestUrl, description, mimeType);
   const header = buildPaymentRequiredHeader(pr);
 
   if (wantsHtml(accept)) {

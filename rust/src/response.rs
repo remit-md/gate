@@ -63,12 +63,13 @@ pub struct Build402Params<'a> {
     pub amount: &'a str,
     pub settlement: Settlement,
     pub provider_address: &'a str,
-    pub facilitator_url: &'a str,
     pub price_display: &'a str,
     pub accept: Option<&'a str>,
     pub reason: Option<&'a str>,
     pub request_url: &'a str,
     pub chain_id: u64,
+    pub description: Option<&'a str>,
+    pub mime_type: Option<&'a str>,
 }
 
 /// Build a 402 Payment Required response with v2 wire format.
@@ -81,13 +82,6 @@ pub fn build_402(p: &Build402Params<'_>) -> Response<Full<Bytes>> {
     let network = config::caip2_network(p.chain_id);
     let asset = config::usdc_address(p.chain_id).to_string();
 
-    let extra = json!({
-        "name": "USDC",
-        "version": "2",
-        "facilitator": p.facilitator_url,
-        "settlement": settlement_str,
-    });
-
     let reqs = PaymentRequirementsV2 {
         scheme: "exact".to_string(),
         network: network.clone(),
@@ -95,15 +89,15 @@ pub fn build_402(p: &Build402Params<'_>) -> Response<Full<Bytes>> {
         asset,
         pay_to: p.provider_address.to_string(),
         max_timeout_seconds: 60,
-        extra: Some(extra),
+        extra: Some(json!({ "settlement": settlement_str })),
     };
 
     let payment_required = PaymentRequired {
         x402_version: 2,
         resource: ResourceInfo {
             url: p.request_url.to_string(),
-            description: Some("Paid API endpoint".to_string()),
-            mime_type: Some("application/json".to_string()),
+            description: p.description.map(|s| s.to_string()),
+            mime_type: p.mime_type.map(|s| s.to_string()),
         },
         accepts: vec![reqs],
         extensions: json!({}),
@@ -159,7 +153,6 @@ pub fn build_requirements(
     amount: &str,
     settlement: Settlement,
     provider_address: &str,
-    facilitator_url: &str,
     chain_id: u64,
 ) -> PaymentRequirementsV2 {
     let settlement_str = match settlement {
@@ -173,12 +166,7 @@ pub fn build_requirements(
         asset: config::usdc_address(chain_id).to_string(),
         pay_to: provider_address.to_string(),
         max_timeout_seconds: 60,
-        extra: Some(json!({
-            "name": "USDC",
-            "version": "2",
-            "facilitator": facilitator_url,
-            "settlement": settlement_str,
-        })),
+        extra: Some(json!({ "settlement": settlement_str })),
     }
 }
 

@@ -54,9 +54,10 @@ pub async fn handle_check(
             resp.headers_mut().insert("x-pay-from", agent.parse().unwrap());
             resp
         }
-        RouteMatch::Paid { route: _, price, settlement } => {
+        RouteMatch::Paid { route, price, settlement } => {
             handle_paid_check(
                 state, &price, settlement, payment_sig, req, original_uri_raw,
+                route.description.as_deref(), route.mime_type.as_deref(),
             ).await
         }
     }
@@ -69,6 +70,8 @@ async fn handle_paid_check(
     payment_sig: Option<&str>,
     req: &Request<hyper::body::Incoming>,
     original_uri: &str,
+    description: Option<&str>,
+    mime_type: Option<&str>,
 ) -> Response<Full<Bytes>> {
     let accept = req.headers().get("accept").and_then(|v| v.to_str().ok());
     let amount = config::price_to_micro_usdc(price);
@@ -77,15 +80,15 @@ async fn handle_paid_check(
         return build_402(&Build402Params {
             amount: &amount, settlement,
             provider_address: &state.config.provider_address,
-            facilitator_url: &state.facilitator_url,
             price_display: price, accept, reason: None,
             request_url: original_uri, chain_id: state.chain_id,
+            description, mime_type,
         });
     };
 
     let requirements = build_requirements(
         &amount, settlement, &state.config.provider_address,
-        &state.facilitator_url, state.chain_id,
+        state.chain_id,
     );
 
     let gate_domain = crate::gate::extract_domain(&state.config.proxy.target);
@@ -109,10 +112,10 @@ async fn handle_paid_check(
         return build_402(&Build402Params {
             amount: &amount, settlement,
             provider_address: &state.config.provider_address,
-            facilitator_url: &state.facilitator_url,
             price_display: price, accept,
             reason: result.invalid_reason.as_deref(),
             request_url: original_uri, chain_id: state.chain_id,
+            description, mime_type,
         });
     }
 

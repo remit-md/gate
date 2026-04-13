@@ -13,6 +13,10 @@ export interface RouteConfig {
   proxy_rewrite?: string;
   /** Default query params injected into every proxied request. e.g. {"key": "abc", "days": "3"} */
   proxy_params?: Record<string, string>;
+  /** Resource description for x402 402 response. e.g. "Weather forecast data" */
+  description?: string;
+  /** Response MIME type for x402 402 response. Defaults to "application/json". */
+  mime_type?: string;
 }
 
 /** Top-level env bindings for the CF Worker. */
@@ -79,9 +83,7 @@ export interface PaymentRequirementsV2 {
   payTo: string;
   maxTimeoutSeconds: number;
   extra?: {
-    name?: string;
-    version?: string;
-    facilitator?: string;
+    /** Pay extension: settlement mode for this route. */
     settlement?: string;
   };
 }
