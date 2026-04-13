@@ -1,4 +1,4 @@
-import type { Env, RouteConfig } from "./types";
+import type { BazaarInfo, Env, RouteConfig } from "./types";
 
 const ETH_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 const URL_RE = /^https?:\/\/.+/;
@@ -33,6 +33,7 @@ export function validateRoutes(routes: RouteConfig[]): RouteConfig[] {
         throw new Error(`Route ${r.path}: invalid method '${r.method}'`);
       }
     }
+    if (r.info) validateInfo(r.info, r.path);
   }
   return routes;
 }
@@ -102,4 +103,42 @@ export function usdcAddress(chain: number): string {
 /** CAIP-2 network identifier. */
 export function caip2Network(chain: number): string {
   return `eip155:${chain}`;
+}
+
+const HTTP_QUERY_METHODS = ["GET", "HEAD", "DELETE"];
+const HTTP_BODY_METHODS = ["POST", "PUT", "PATCH"];
+
+/** Validate a Bazaar info block. Throws on invalid. */
+function validateInfo(info: BazaarInfo, path: string): void {
+  const label = `Route ${path}.info`;
+  if (!info.input || typeof info.input !== "object") {
+    throw new Error(`${label}: 'input' is required`);
+  }
+  const { input } = info;
+  if (input.type === "http") {
+    if (!input.method) {
+      throw new Error(`${label}.input: 'method' is required for type 'http'`);
+    }
+    const m = input.method.toUpperCase();
+    if (HTTP_BODY_METHODS.includes(m)) {
+      const body = input as unknown as Record<string, unknown>;
+      if (!body.bodyType) {
+        throw new Error(`${label}.input: 'bodyType' is required for ${m}`);
+      }
+      if (!body.body || typeof body.body !== "object") {
+        throw new Error(`${label}.input: 'body' is required for ${m}`);
+      }
+    } else if (!HTTP_QUERY_METHODS.includes(m)) {
+      throw new Error(`${label}.input: invalid method '${input.method}'`);
+    }
+  } else if (input.type === "mcp") {
+    if (!input.tool) {
+      throw new Error(`${label}.input: 'tool' is required for type 'mcp'`);
+    }
+    if (!input.inputSchema || typeof input.inputSchema !== "object") {
+      throw new Error(`${label}.input: 'inputSchema' is required for type 'mcp'`);
+    }
+  } else {
+    throw new Error(`${label}.input.type: must be 'http' or 'mcp', got '${(input as Record<string, unknown>).type}'`);
+  }
 }

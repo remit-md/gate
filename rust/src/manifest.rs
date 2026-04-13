@@ -86,8 +86,8 @@ pub fn handle_well_known_x402(state: &GateState) -> Response<Full<Bytes>> {
             if let Some(ref m) = r.mime_type {
                 entry["mimeType"] = json!(m);
             }
-            if let Some(ref h) = r.hint {
-                entry["hint"] = json!(h);
+            if let Some(ref info) = r.info {
+                entry["info"] = info.clone();
             }
             entry
         })

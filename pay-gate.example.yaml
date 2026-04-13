@@ -18,13 +18,32 @@ routes:
     method: "GET"
     price: "0.01"
     settlement: "tab"
-    hint: "?q={query}&limit=50"              # free-form hint for agents
+    description: "Premium data query"
+    info:
+      input:
+        type: "http"
+        method: "GET"
+        queryParams:
+          q: { type: "string", description: "Search query", required: true }
+          limit: { type: "integer", description: "Max results (default 50)" }
+      output:
+        type: "json"
 
   - path: "/api/v1/report"
     method: "POST"
     price: "5.00"
     settlement: "direct"
-    hint: '{"start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD"}'
+    description: "Generate report"
+    info:
+      input:
+        type: "http"
+        method: "POST"
+        bodyType: "json"
+        body:
+          start_date: { type: "string", description: "YYYY-MM-DD", required: true }
+          end_date: { type: "string", description: "YYYY-MM-DD", required: true }
+      output:
+        type: "json"
 
   - path: "/api/v1/health"
     free: true

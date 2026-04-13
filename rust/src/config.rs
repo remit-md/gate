@@ -70,13 +70,12 @@ pub struct RouteConfig {
     #[serde(default)]
     pub allowlist: Vec<String>,
     pub price_endpoint: Option<String>,
-    /// Free-form hint for agents: query params, body example, etc.
-    /// e.g. "?q={city}" or '{"prompt": "string"}'
-    pub hint: Option<String>,
     /// Resource description for x402 402 response. e.g. "Weather forecast data"
     pub description: Option<String>,
     /// Response MIME type for x402 402 response. e.g. "application/json"
     pub mime_type: Option<String>,
+    /// Bazaar info block — structured input/output description for agents.
+    pub info: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, serde::Serialize)]
@@ -207,6 +206,9 @@ fn validate_config(config: &Config) -> Result<(), String> {
         if let Some(ref url) = route.price_endpoint {
             validate_url(url, &format!("{}.price_endpoint", label))?;
         }
+        if let Some(ref info) = route.info {
+            validate_info(info, &label)?;
+        }
     }
 
     if let Some(ref disc) = config.discovery {
@@ -264,6 +266,42 @@ fn validate_price(price: &str, label: &str) -> Result<(), String> {
     let n: f64 = price.parse().map_err(|_| format!("{}: invalid price '{}'", label, price))?;
     if n <= 0.0 {
         return Err(format!("{}: price must be positive, got '{}'", label, price));
+    }
+    Ok(())
+}
+
+/// Validate a Bazaar info block (stored as serde_json::Value).
+fn validate_info(info: &serde_json::Value, label: &str) -> Result<(), String> {
+    let input = info.get("input")
+        .ok_or_else(|| format!("{}.info: 'input' is required", label))?;
+    let input_type = input.get("type").and_then(|v| v.as_str())
+        .ok_or_else(|| format!("{}.info.input: 'type' is required", label))?;
+    match input_type {
+        "http" => {
+            let method = input.get("method").and_then(|v| v.as_str())
+                .ok_or_else(|| format!("{}.info.input: 'method' is required for type 'http'", label))?;
+            match method.to_uppercase().as_str() {
+                "POST" | "PUT" | "PATCH" => {
+                    if input.get("bodyType").and_then(|v| v.as_str()).is_none() {
+                        return Err(format!("{}.info.input: 'bodyType' is required for {}", label, method));
+                    }
+                    if !input.get("body").is_some_and(|v| v.is_object()) {
+                        return Err(format!("{}.info.input: 'body' is required for {}", label, method));
+                    }
+                }
+                "GET" | "HEAD" | "DELETE" => {}
+                _ => return Err(format!("{}.info.input: invalid method '{}'", label, method)),
+            }
+        }
+        "mcp" => {
+            if input.get("tool").and_then(|v| v.as_str()).is_none() {
+                return Err(format!("{}.info.input: 'tool' is required for type 'mcp'", label));
+            }
+            if !input.get("inputSchema").is_some_and(|v| v.is_object()) {
+                return Err(format!("{}.info.input: 'inputSchema' is required for type 'mcp'", label));
+            }
+        }
+        other => return Err(format!("{}.info.input.type: must be 'http' or 'mcp', got '{}'", label, other)),
     }
     Ok(())
 }

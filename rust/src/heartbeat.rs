@@ -33,8 +33,6 @@ struct HeartbeatRoute {
     method: String,
     price: Option<String>,
     settlement: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    hint: Option<String>,
 }
 
 fn build_payload(config: &Config, discovery: &DiscoveryConfig) -> Option<HeartbeatPayload> {
@@ -53,7 +51,6 @@ fn build_payload(config: &Config, discovery: &DiscoveryConfig) -> Option<Heartbe
                 Some(Settlement::Tab) => "tab".to_string(),
                 None => "auto".to_string(),
             },
-            hint: r.hint.clone(),
         })
         .collect();
 

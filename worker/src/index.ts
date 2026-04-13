@@ -61,7 +61,7 @@ app.get("/.well-known/x402", async (c) => {
       };
       if (r.description) entry.description = r.description;
       if (r.mime_type) entry.mimeType = r.mime_type;
-      if (r.hint) entry.hint = r.hint;
+      if (r.info) entry.info = r.info;
       return entry;
     });
 

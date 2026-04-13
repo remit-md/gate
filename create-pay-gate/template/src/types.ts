@@ -7,8 +7,6 @@ export interface RouteConfig {
   free?: boolean;
   allowlist?: string[];
   price_endpoint?: string;
-  /** Free-form usage hint for agents. e.g. "?q={city}" or '{"prompt": "string"}' */
-  hint?: string;
   /** Rewrite the path before proxying to origin. e.g. "/v1/forecast.json" */
   proxy_rewrite?: string;
   /** Default query params injected into every proxied request. e.g. {"key": "abc", "days": "3"} */
@@ -17,6 +15,55 @@ export interface RouteConfig {
   description?: string;
   /** Response MIME type for x402 402 response. Defaults to "application/json". */
   mime_type?: string;
+  /** Bazaar info block — structured input/output description for agents. Replaces hint. */
+  info?: BazaarInfo;
+}
+
+/** Bazaar info block — describes how to call and what to expect from an endpoint. */
+export interface BazaarInfo {
+  input: BazaarInput;
+  output?: BazaarOutput;
+}
+
+/** Discriminated union on input.type: "http" or "mcp". */
+export type BazaarInput = HttpQueryInput | HttpBodyInput | McpInput;
+
+export interface HttpQueryInput {
+  type: "http";
+  method: "GET" | "HEAD" | "DELETE";
+  queryParams?: Record<string, ParamDef>;
+  headers?: Record<string, string>;
+}
+
+export interface HttpBodyInput {
+  type: "http";
+  method: "POST" | "PUT" | "PATCH";
+  bodyType: "json" | "form-data" | "text";
+  body: Record<string, unknown>;
+  queryParams?: Record<string, ParamDef>;
+  headers?: Record<string, string>;
+}
+
+export interface McpInput {
+  type: "mcp";
+  tool: string;
+  description?: string;
+  inputSchema: Record<string, unknown>;
+  transport?: "streamable-http" | "sse";
+  example?: Record<string, unknown>;
+}
+
+export interface ParamDef {
+  type: string;
+  description?: string;
+  required?: boolean;
+  [key: string]: unknown;
+}
+
+export interface BazaarOutput {
+  type: string;
+  format?: string;
+  example?: unknown;
 }
 
 /** Top-level env bindings for the CF Worker. */
@@ -63,7 +110,6 @@ export interface HeartbeatRoute {
   method: string;
   price?: string;
   settlement: string;
-  hint?: string;
 }
 
 /** x402 v2 top-level 402 response (base64-encoded in PAYMENT-REQUIRED header). */

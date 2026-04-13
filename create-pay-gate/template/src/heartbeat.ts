@@ -75,7 +75,6 @@ function buildRoutes(routes: RouteConfig[]): HeartbeatRoute[] {
       method: r.method || "*",
       price: r.price,
       settlement: r.settlement || (r.price ? autoSettlement(r.price) : "auto"),
-      hint: r.hint,
     }));
 }
 
