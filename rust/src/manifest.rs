@@ -77,7 +77,7 @@ pub fn handle_well_known_x402(state: &GateState) -> Response<Full<Bytes>> {
                     "asset": asset,
                     "payTo": &state.config.provider_address,
                     "maxTimeoutSeconds": 60,
-                    "extra": { "settlement": settlement_str },
+                    "extra": { "settlement": settlement_str, "facilitator": &state.facilitator_url },
                 },
             });
             if let Some(ref d) = r.description {

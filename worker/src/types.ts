@@ -85,6 +85,8 @@ export interface PaymentRequirementsV2 {
   extra?: {
     /** Pay extension: settlement mode for this route. */
     settlement?: string;
+    /** Pay extension: facilitator URL for payment verification. */
+    facilitator?: string;
   };
 }
 

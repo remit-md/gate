@@ -56,7 +56,7 @@ app.get("/.well-known/x402", async (c) => {
           asset,
           payTo: c.env.PROVIDER_ADDRESS,
           maxTimeoutSeconds: 60,
-          extra: { settlement },
+          extra: { settlement, facilitator: facilitatorUrl(c.env) },
         },
       };
       if (r.description) entry.description = r.description;
@@ -186,7 +186,7 @@ app.all("*", async (c) => {
   const asset = usdcAddress(chain);
   const facUrl = facilitatorUrl(c.env);
   const amount = priceToMicroUsdc(price);
-  const reqs = buildRequirements(amount, settlement, c.env.PROVIDER_ADDRESS, chain, asset);
+  const reqs = buildRequirements(amount, settlement, c.env.PROVIDER_ADDRESS, facUrl, chain, asset);
 
   if (!paymentSig) {
     return make402Response(reqs, path, price, c.req.header("accept"),
@@ -241,7 +241,7 @@ async function handlePaidRequest(
   const asset = usdcAddress(chain);
   const facUrl = facilitatorUrl(env);
   const amount = priceToMicroUsdc(match.price);
-  const reqs = buildRequirements(amount, match.settlement, env.PROVIDER_ADDRESS, chain, asset);
+  const reqs = buildRequirements(amount, match.settlement, env.PROVIDER_ADDRESS, facUrl, chain, asset);
 
   if (!paymentSig) {
     return make402Response(reqs, requestUrl, match.price, accept,

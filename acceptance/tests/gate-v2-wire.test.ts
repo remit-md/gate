@@ -98,13 +98,14 @@ describe("x402 v2 wire format compliance", () => {
     assert.ok(extra["settlement"] === "tab" || extra["settlement"] === "direct");
   });
 
-  it("accepts[0].extra does NOT contain facilitator (server-side only)", async () => {
+  it("accepts[0].extra.facilitator is a URL starting with http", async () => {
     const resp = await gateRequest("/api/v1/premium/data");
     assertStatus(resp, 402);
     const decoded = decodePaymentRequired(resp.headers.get("payment-required")!);
     const reqs = (decoded["accepts"] as Record<string, unknown>[])[0]!;
     const extra = reqs["extra"] as Record<string, unknown>;
-    assert.strictEqual(extra["facilitator"], undefined);
+    assert.ok(typeof extra["facilitator"] === "string");
+    assert.match(extra["facilitator"] as string, /^https?:\/\//);
   });
 
   it("accepts[0].extra does NOT contain name or version (redundant)", async () => {
@@ -175,8 +176,8 @@ describe("x402 v2 wire format compliance", () => {
       assert.match(reqs["network"] as string, /^eip155:\d+$/);
       const extra = reqs["extra"] as Record<string, unknown>;
       assert.ok(extra["settlement"] === "direct" || extra["settlement"] === "tab");
-      // No facilitator in extra
-      assert.strictEqual(extra["facilitator"], undefined);
+      assert.ok(typeof extra["facilitator"] === "string");
+      assert.match(extra["facilitator"] as string, /^https?:\/\//);
     }
   });
 

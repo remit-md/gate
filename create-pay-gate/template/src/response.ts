@@ -35,6 +35,7 @@ export function buildRequirements(
   amount: string,
   settlement: "direct" | "tab",
   providerAddress: string,
+  facilitatorUrl: string,
   chain: number,
   asset: string,
 ): PaymentRequirementsV2 {
@@ -45,7 +46,7 @@ export function buildRequirements(
     asset,
     payTo: providerAddress,
     maxTimeoutSeconds: 60,
-    extra: { settlement },
+    extra: { settlement, facilitator: facilitatorUrl },
   };
 }
 

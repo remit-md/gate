@@ -63,6 +63,7 @@ pub async fn handle_request(
                     let resp = build_402(&Build402Params {
                         amount: &amount, settlement: final_settlement,
                         provider_address: &state.config.provider_address,
+                        facilitator_url: &state.facilitator_url,
                         price_display: &final_price, accept, reason: None,
                         request_url: &request_url, chain_id: state.chain_id,
                         description: route.description.as_deref(),
@@ -144,7 +145,7 @@ async fn handle_verification<'a>(
 
     let requirements = build_requirements(
         &amount, settlement, &state.config.provider_address,
-        state.chain_id,
+        &state.facilitator_url, state.chain_id,
     );
 
     // Extract domain from proxy target for volume tracking (P11)
@@ -173,6 +174,7 @@ async fn handle_verification<'a>(
             let resp_402 = build_402(&Build402Params {
                 amount: &amount, settlement,
                 provider_address: &state.config.provider_address,
+                facilitator_url: &state.facilitator_url,
                 price_display: price, accept,
                 reason: resp.invalid_reason.as_deref(),
                 request_url, chain_id: state.chain_id,

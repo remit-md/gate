@@ -72,8 +72,8 @@ describe("pay-gate acceptance", () => {
     const extra = reqs["extra"] as Record<string, unknown>;
     assert.ok(extra);
     assert.equal(extra["settlement"], "tab");
-    // facilitator and name are no longer exposed in x402 response
-    assert.strictEqual(extra["facilitator"], undefined);
+    assert.ok(typeof extra["facilitator"] === "string");
+    assert.match(extra["facilitator"] as string, /^https?:\/\//);
     assert.strictEqual(extra["name"], undefined);
 
     const resource = decoded["resource"] as Record<string, unknown>;

@@ -80,6 +80,7 @@ async fn handle_paid_check<'a>(
         return build_402(&Build402Params {
             amount: &amount, settlement,
             provider_address: &state.config.provider_address,
+            facilitator_url: &state.facilitator_url,
             price_display: price, accept, reason: None,
             request_url: original_uri, chain_id: state.chain_id,
             description, mime_type,
@@ -88,7 +89,7 @@ async fn handle_paid_check<'a>(
 
     let requirements = build_requirements(
         &amount, settlement, &state.config.provider_address,
-        state.chain_id,
+        &state.facilitator_url, state.chain_id,
     );
 
     let gate_domain = crate::gate::extract_domain(&state.config.proxy.target);
@@ -112,6 +113,7 @@ async fn handle_paid_check<'a>(
         return build_402(&Build402Params {
             amount: &amount, settlement,
             provider_address: &state.config.provider_address,
+            facilitator_url: &state.facilitator_url,
             price_display: price, accept,
             reason: result.invalid_reason.as_deref(),
             request_url: original_uri, chain_id: state.chain_id,

@@ -63,6 +63,7 @@ pub struct Build402Params<'a> {
     pub amount: &'a str,
     pub settlement: Settlement,
     pub provider_address: &'a str,
+    pub facilitator_url: &'a str,
     pub price_display: &'a str,
     pub accept: Option<&'a str>,
     pub reason: Option<&'a str>,
@@ -89,7 +90,10 @@ pub fn build_402(p: &Build402Params<'_>) -> Response<Full<Bytes>> {
         asset,
         pay_to: p.provider_address.to_string(),
         max_timeout_seconds: 60,
-        extra: Some(json!({ "settlement": settlement_str })),
+        extra: Some(json!({
+            "settlement": settlement_str,
+            "facilitator": p.facilitator_url,
+        })),
     };
 
     let payment_required = PaymentRequired {
@@ -153,6 +157,7 @@ pub fn build_requirements(
     amount: &str,
     settlement: Settlement,
     provider_address: &str,
+    facilitator_url: &str,
     chain_id: u64,
 ) -> PaymentRequirementsV2 {
     let settlement_str = match settlement {
@@ -166,7 +171,10 @@ pub fn build_requirements(
         asset: config::usdc_address(chain_id).to_string(),
         pay_to: provider_address.to_string(),
         max_timeout_seconds: 60,
-        extra: Some(json!({ "settlement": settlement_str })),
+        extra: Some(json!({
+            "settlement": settlement_str,
+            "facilitator": facilitator_url,
+        })),
     }
 }
 
