@@ -6,7 +6,7 @@ COPY pay-gate.example.yaml .
 WORKDIR /build/rust
 RUN cargo build --release
 
-FROM gcr.io/distroless/cc-debian12
+FROM gcr.io/distroless/cc-debian13
 COPY --from=builder /build/rust/target/release/pay-gate /pay-gate
 COPY pay-gate.example.yaml /etc/pay-gate/config.yaml
 EXPOSE 8402
