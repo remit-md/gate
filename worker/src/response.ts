@@ -1,4 +1,4 @@
-import type { PaymentRequired, PaymentRequirementsV2, SettlementResponse, GateError } from "./types";
+import type { BazaarInfo, PaymentRequired, PaymentRequirementsV2, SettlementResponse, GateError } from "./types";
 import { caip2Network } from "./config";
 
 /**
@@ -16,15 +16,20 @@ export function buildPaymentRequired(
   requestUrl: string,
   description?: string,
   mimeType?: string,
+  info?: BazaarInfo,
 ): PaymentRequired {
   const resource: PaymentRequired["resource"] = { url: requestUrl };
   if (description) resource.description = description;
   if (mimeType) resource.mimeType = mimeType;
+  const extensions: Record<string, unknown> = {};
+  if (info) {
+    extensions.bazaar = { info, schema: buildInfoSchema(info) };
+  }
   return {
     x402Version: 2,
     resource,
     accepts: [reqs],
-    extensions: {},
+    extensions,
   };
 }
 
@@ -110,8 +115,9 @@ export function make402Response(
   reason?: string,
   description?: string,
   mimeType?: string,
+  info?: BazaarInfo,
 ): Response {
-  const pr = buildPaymentRequired(reqs, requestUrl, description, mimeType);
+  const pr = buildPaymentRequired(reqs, requestUrl, description, mimeType, info);
   const header = buildPaymentRequiredHeader(pr);
 
   if (wantsHtml(accept)) {
@@ -155,4 +161,69 @@ export function make503Response(): Response {
     JSON.stringify({ error: "service_unavailable", message: "Payment facilitator is unreachable." }),
     { status: 503, headers: { "Content-Type": "application/json" } },
   );
+}
+
+/**
+ * Build a JSON Schema Draft 2020-12 from a BazaarInfo block.
+ * Deterministic: same info always produces the same schema.
+ */
+function buildInfoSchema(info: BazaarInfo): Record<string, unknown> {
+  const schema: Record<string, unknown> = {
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    type: "object",
+    properties: { input: buildInputSchema(info.input) },
+    required: ["input"],
+  };
+  if (info.output) {
+    (schema.properties as Record<string, unknown>).output = {
+      type: "object",
+      properties: { type: { type: "string" } },
+    };
+  }
+  return schema;
+}
+
+function buildInputSchema(input: BazaarInfo["input"]): Record<string, unknown> {
+  if (input.type === "http") {
+    const props: Record<string, unknown> = {
+      type: { const: "http" },
+      method: { const: input.method },
+    };
+    const required = ["type", "method"];
+    if ("queryParams" in input && input.queryParams) {
+      props.queryParams = buildParamsSchema(input.queryParams);
+    }
+    if ("bodyType" in input && input.bodyType) {
+      props.bodyType = { const: input.bodyType };
+      required.push("bodyType");
+    }
+    if ("body" in input && input.body) {
+      props.body = { type: "object" };
+      required.push("body");
+    }
+    return { type: "object", properties: props, required };
+  }
+  // mcp
+  return {
+    type: "object",
+    properties: {
+      type: { const: "mcp" },
+      tool: { type: "string" },
+      inputSchema: { type: "object" },
+    },
+    required: ["type", "tool", "inputSchema"],
+  };
+}
+
+function buildParamsSchema(params: Record<string, unknown>): Record<string, unknown> {
+  const props: Record<string, unknown> = {};
+  const required: string[] = [];
+  for (const [key, def] of Object.entries(params)) {
+    const d = def as Record<string, unknown>;
+    props[key] = { type: d.type || "string" };
+    if (d.required) required.push(key);
+  }
+  const schema: Record<string, unknown> = { type: "object", properties: props };
+  if (required.length > 0) schema.required = required;
+  return schema;
 }

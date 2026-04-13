@@ -71,6 +71,7 @@ pub struct Build402Params<'a> {
     pub chain_id: u64,
     pub description: Option<&'a str>,
     pub mime_type: Option<&'a str>,
+    pub info: Option<&'a serde_json::Value>,
 }
 
 /// Build a 402 Payment Required response with v2 wire format.
@@ -96,6 +97,11 @@ pub fn build_402(p: &Build402Params<'_>) -> Response<Full<Bytes>> {
         })),
     };
 
+    let extensions = match p.info {
+        Some(info) => json!({ "bazaar": { "info": info, "schema": build_info_schema(info) } }),
+        None => json!({}),
+    };
+
     let payment_required = PaymentRequired {
         x402_version: 2,
         resource: ResourceInfo {
@@ -104,7 +110,7 @@ pub fn build_402(p: &Build402Params<'_>) -> Response<Full<Bytes>> {
             mime_type: p.mime_type.map(|s| s.to_string()),
         },
         accepts: vec![reqs],
-        extensions: json!({}),
+        extensions,
     };
 
     let header_value = BASE64.encode(
@@ -176,6 +182,77 @@ pub fn build_requirements(
             "facilitator": facilitator_url,
         })),
     }
+}
+
+/// Build a JSON Schema Draft 2020-12 from a Bazaar info block.
+fn build_info_schema(info: &serde_json::Value) -> serde_json::Value {
+    let empty = json!({});
+    let input = info.get("input").unwrap_or(&empty);
+    let input_schema = build_input_schema(input);
+    let mut schema = json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": { "input": input_schema },
+        "required": ["input"],
+    });
+    if info.get("output").is_some() {
+        schema["properties"]["output"] = json!({
+            "type": "object",
+            "properties": { "type": { "type": "string" } },
+        });
+    }
+    schema
+}
+
+fn build_input_schema(input: &serde_json::Value) -> serde_json::Value {
+    let input_type = input.get("type").and_then(|v| v.as_str()).unwrap_or("");
+    if input_type == "http" {
+        let method = input.get("method").and_then(|v| v.as_str()).unwrap_or("GET");
+        let mut props = json!({
+            "type": { "const": "http" },
+            "method": { "const": method },
+        });
+        let mut required = vec!["type", "method"];
+        if let Some(qp) = input.get("queryParams").and_then(|v| v.as_object()) {
+            props["queryParams"] = build_params_schema(qp);
+        }
+        if let Some(bt) = input.get("bodyType").and_then(|v| v.as_str()) {
+            props["bodyType"] = json!({ "const": bt });
+            required.push("bodyType");
+        }
+        if input.get("body").is_some_and(|v| v.is_object()) {
+            props["body"] = json!({ "type": "object" });
+            required.push("body");
+        }
+        json!({ "type": "object", "properties": props, "required": required })
+    } else {
+        json!({
+            "type": "object",
+            "properties": {
+                "type": { "const": "mcp" },
+                "tool": { "type": "string" },
+                "inputSchema": { "type": "object" },
+            },
+            "required": ["type", "tool", "inputSchema"],
+        })
+    }
+}
+
+fn build_params_schema(params: &serde_json::Map<String, serde_json::Value>) -> serde_json::Value {
+    let mut props = json!({});
+    let mut required: Vec<&str> = vec![];
+    for (key, def) in params {
+        let param_type = def.get("type").and_then(|v| v.as_str()).unwrap_or("string");
+        props[key] = json!({ "type": param_type });
+        if def.get("required").and_then(|v| v.as_bool()).unwrap_or(false) {
+            required.push(key);
+        }
+    }
+    let mut schema = json!({ "type": "object", "properties": props });
+    if !required.is_empty() {
+        schema["required"] = json!(required);
+    }
+    schema
 }
 
 fn build_402_html(price: &str) -> String {

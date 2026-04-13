@@ -190,7 +190,7 @@ app.all("*", async (c) => {
 
   if (!paymentSig) {
     return make402Response(reqs, path, price, c.req.header("accept"),
-      undefined, match.route.description, match.route.mime_type);
+      undefined, match.route.description, match.route.mime_type, match.route.info);
   }
 
   // Verify payment with facilitator
@@ -208,7 +208,7 @@ app.all("*", async (c) => {
   // Verification failed
   if (!result.isValid) {
     return make402Response(reqs, path, price, c.req.header("accept"),
-      result.invalidReason, match.route.description, match.route.mime_type);
+      result.invalidReason, match.route.description, match.route.mime_type, match.route.info);
   }
 
   // Verification succeeded — proxy with payment headers
@@ -245,7 +245,7 @@ async function handlePaidRequest(
 
   if (!paymentSig) {
     return make402Response(reqs, requestUrl, match.price, accept,
-      undefined, match.route.description, match.route.mime_type);
+      undefined, match.route.description, match.route.mime_type, match.route.info);
   }
 
   const result = await verifyPayment(facUrl, paymentSig, reqs);
@@ -258,7 +258,7 @@ async function handlePaidRequest(
 
   if (!result.isValid) {
     return make402Response(reqs, requestUrl, match.price, accept,
-      result.invalidReason, match.route.description, match.route.mime_type);
+      result.invalidReason, match.route.description, match.route.mime_type, match.route.info);
   }
 
   const headers: Record<string, string> = {
