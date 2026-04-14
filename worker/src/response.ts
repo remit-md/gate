@@ -35,6 +35,8 @@ export function buildPaymentRequired(
 
 /**
  * Build a v2 PaymentRequirementsV2 object.
+ * If baseUrl is provided (from discovery config), it's included in extra
+ * so the facilitator can auto-catalog the service from payment flow.
  */
 export function buildRequirements(
   amount: string,
@@ -43,7 +45,10 @@ export function buildRequirements(
   facilitatorUrl: string,
   chain: number,
   asset: string,
+  baseUrl?: string,
 ): PaymentRequirementsV2 {
+  const extra: Record<string, string> = { settlement, facilitator: facilitatorUrl };
+  if (baseUrl) extra.base_url = baseUrl;
   return {
     scheme: "exact",
     network: caip2Network(chain),
@@ -51,7 +56,7 @@ export function buildRequirements(
     asset,
     payTo: providerAddress,
     maxTimeoutSeconds: 60,
-    extra: { settlement, facilitator: facilitatorUrl },
+    extra,
   };
 }
 

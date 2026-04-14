@@ -187,7 +187,8 @@ app.all("*", async (c) => {
   const asset = usdcAddress(chain);
   const facUrl = facilitatorUrl(c.env);
   const amount = priceToMicroUsdc(price);
-  const reqs = buildRequirements(amount, settlement, c.env.PROVIDER_ADDRESS, facUrl, chain, asset);
+  const baseUrl = c.env.DISCOVERY_BASE_URL || undefined;
+  const reqs = buildRequirements(amount, settlement, c.env.PROVIDER_ADDRESS, facUrl, chain, asset, baseUrl);
 
   if (!paymentSig) {
     return make402Response(reqs, path, price, c.req.header("accept"),
@@ -254,7 +255,8 @@ async function handlePaidRequest(
   const asset = usdcAddress(chain);
   const facUrl = facilitatorUrl(env);
   const amount = priceToMicroUsdc(match.price);
-  const reqs = buildRequirements(amount, match.settlement, env.PROVIDER_ADDRESS, facUrl, chain, asset);
+  const sidecarBaseUrl = env.DISCOVERY_BASE_URL || undefined;
+  const reqs = buildRequirements(amount, match.settlement, env.PROVIDER_ADDRESS, facUrl, chain, asset, sidecarBaseUrl);
 
   if (!paymentSig) {
     return make402Response(reqs, requestUrl, match.price, accept,

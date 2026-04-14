@@ -6,7 +6,7 @@ use hyper::{Request, Response};
 
 use crate::config::{self, Config, FailMode, GateMode, Settlement};
 use crate::error::GateError;
-use crate::response::{build_402, Build402Params, build_requirements, build_settlement_response};
+use crate::response::{build_402, Build402Params, build_requirements_with_base_url, build_settlement_response};
 use crate::routes::{RouteMatch, RouteMatcher};
 use crate::verify;
 
@@ -150,9 +150,10 @@ async fn handle_verification<'a>(
         });
     }
 
-    let requirements = build_requirements(
+    let disc_base_url = state.config.discovery.as_ref().map(|d| d.base_url.as_str());
+    let requirements = build_requirements_with_base_url(
         &amount, settlement, &state.config.provider_address,
-        &state.facilitator_url, state.chain_id,
+        &state.facilitator_url, state.chain_id, disc_base_url,
     );
 
     // Extract domain from proxy target for volume tracking (P11)

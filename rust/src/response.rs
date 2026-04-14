@@ -166,10 +166,31 @@ pub fn build_requirements(
     facilitator_url: &str,
     chain_id: u64,
 ) -> PaymentRequirementsV2 {
+    build_requirements_with_base_url(
+        amount, settlement, provider_address, facilitator_url, chain_id, None,
+    )
+}
+
+/// Build requirements with optional base_url for auto-catalog in facilitator.
+pub fn build_requirements_with_base_url(
+    amount: &str,
+    settlement: Settlement,
+    provider_address: &str,
+    facilitator_url: &str,
+    chain_id: u64,
+    base_url: Option<&str>,
+) -> PaymentRequirementsV2 {
     let settlement_str = match settlement {
         Settlement::Direct => "direct",
         Settlement::Tab => "tab",
     };
+    let mut extra = json!({
+        "settlement": settlement_str,
+        "facilitator": facilitator_url,
+    });
+    if let Some(url) = base_url {
+        extra["base_url"] = json!(url);
+    }
     PaymentRequirementsV2 {
         scheme: "exact".to_string(),
         network: config::caip2_network(chain_id),
@@ -177,10 +198,7 @@ pub fn build_requirements(
         asset: config::usdc_address(chain_id).to_string(),
         pay_to: provider_address.to_string(),
         max_timeout_seconds: 60,
-        extra: Some(json!({
-            "settlement": settlement_str,
-            "facilitator": facilitator_url,
-        })),
+        extra: Some(extra),
     }
 }
 
