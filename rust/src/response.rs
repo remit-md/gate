@@ -168,19 +168,6 @@ pub fn build_settlement_response(payer: Option<&str>, chain_id: u64) -> String {
     BASE64.encode(serde_json::to_string(&resp).unwrap_or_default())
 }
 
-/// Build the v2 PaymentRequirementsV2 struct for use in verify requests.
-pub fn build_requirements(
-    amount: &str,
-    settlement: Settlement,
-    provider_address: &str,
-    facilitator_url: &str,
-    chain_id: u64,
-) -> PaymentRequirementsV2 {
-    build_requirements_with_base_url(
-        amount, settlement, provider_address, facilitator_url, chain_id, None,
-    )
-}
-
 /// Build requirements with optional base_url for auto-catalog in facilitator.
 pub fn build_requirements_with_base_url(
     amount: &str,
