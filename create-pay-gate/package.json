@@ -1,6 +1,6 @@
 {
   "name": "create-pay-gate",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "description": "Scaffold a pay-gate x402 payment gateway. Monetizes any HTTP API for AI agents. Part of Pay. USDC on Base.",
   "type": "module",
   "bin": {
