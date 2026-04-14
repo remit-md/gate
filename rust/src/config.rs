@@ -76,6 +76,9 @@ pub struct RouteConfig {
     pub mime_type: Option<String>,
     /// Bazaar info block — structured input/output description for agents.
     pub info: Option<serde_json::Value>,
+    /// Route template with named path params (e.g. "/users/:id").
+    /// When set, used for matching instead of path.
+    pub route_template: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, serde::Serialize)]
@@ -209,6 +212,9 @@ fn validate_config(config: &Config) -> Result<(), String> {
         if let Some(ref info) = route.info {
             validate_info(info, &label)?;
         }
+        if let Some(ref tmpl) = route.route_template {
+            validate_route_template(tmpl, &label)?;
+        }
     }
 
     if let Some(ref disc) = config.discovery {
@@ -258,6 +264,25 @@ fn validate_eth_address(addr: &str, field: &str) -> Result<(), String> {
 fn validate_url(url: &str, field: &str) -> Result<(), String> {
     if !url.starts_with("http://") && !url.starts_with("https://") {
         return Err(format!("{}: invalid URL '{}'", field, url));
+    }
+    Ok(())
+}
+
+/// Validate a route_template per Bazaar spec rules.
+fn validate_route_template(tmpl: &str, label: &str) -> Result<(), String> {
+    if !tmpl.starts_with('/') {
+        return Err(format!("{}.route_template: must start with '/'", label));
+    }
+    if tmpl.contains("..") {
+        return Err(format!("{}.route_template: must not contain '..'", label));
+    }
+    if tmpl.contains("://") {
+        return Err(format!("{}.route_template: must not contain '://'", label));
+    }
+    // Check percent-encoded traversal (%2e%2e = ..)
+    let lower = tmpl.to_lowercase();
+    if lower.contains("%2e%2e") || lower.contains("%2e.") || lower.contains(".%2e") {
+        return Err(format!("{}.route_template: must not contain '..' (encoded)", label));
     }
     Ok(())
 }

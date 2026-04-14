@@ -30,8 +30,13 @@ impl RouteMatcher {
     pub fn new(config: &Config) -> Result<Arc<Self>, String> {
         let mut builder = GlobSetBuilder::new();
         for route in &config.routes {
-            let glob = Glob::new(&route.path)
-                .map_err(|e| format!("Invalid glob pattern '{}': {}", route.path, e))?;
+            // Use route_template for matching if set, converting :param to *
+            let pattern = match &route.route_template {
+                Some(tmpl) => template_to_glob(tmpl),
+                None => route.path.clone(),
+            };
+            let glob = Glob::new(&pattern)
+                .map_err(|e| format!("Invalid glob pattern '{}': {}", pattern, e))?;
             builder.add(glob);
         }
         let globset = builder.build()
@@ -95,6 +100,15 @@ impl RouteMatcher {
             DefaultAction::Block => RouteMatch::Blocked,
         }
     }
+}
+
+/// Convert a route template to a glob pattern: `:paramName` → `*`.
+fn template_to_glob(template: &str) -> String {
+    template
+        .split('/')
+        .map(|seg| if seg.starts_with(':') { "*" } else { seg })
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 #[cfg(test)]

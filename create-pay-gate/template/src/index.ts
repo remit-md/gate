@@ -4,6 +4,7 @@ import { loadRoutes, validateEnv, facilitatorUrl, priceToMicroUsdc, autoSettleme
 import { matchRoute, extractAgentAddress } from "./gate";
 import { verifyPayment, checkFacilitatorHealth } from "./verify";
 import { make402Response, make403Response, make429Response, make503Response, buildRequirements, buildSettlementResponse } from "./response";
+import { validateRequest, validateQueryParamsFromUri } from "./validate";
 import { sendHeartbeat } from "./heartbeat";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -62,6 +63,7 @@ app.get("/.well-known/x402", async (c) => {
       if (r.description) entry.description = r.description;
       if (r.mime_type) entry.mimeType = r.mime_type;
       if (r.info) entry.info = r.info;
+      if (r.route_template) entry.routeTemplate = r.route_template;
       return entry;
     });
 
@@ -186,11 +188,12 @@ app.all("*", async (c) => {
   const asset = usdcAddress(chain);
   const facUrl = facilitatorUrl(c.env);
   const amount = priceToMicroUsdc(price);
-  const reqs = buildRequirements(amount, settlement, c.env.PROVIDER_ADDRESS, facUrl, chain, asset);
+  const baseUrl = c.env.DISCOVERY_BASE_URL || undefined;
+  const reqs = buildRequirements(amount, settlement, c.env.PROVIDER_ADDRESS, facUrl, chain, asset, baseUrl);
 
   if (!paymentSig) {
     return make402Response(reqs, path, price, c.req.header("accept"),
-      undefined, match.route.description, match.route.mime_type, match.route.info);
+      undefined, match.route.description, match.route.mime_type, match.route.info, match.route.route_template);
   }
 
   // Verify payment with facilitator
@@ -208,7 +211,19 @@ app.all("*", async (c) => {
   // Verification failed
   if (!result.isValid) {
     return make402Response(reqs, path, price, c.req.header("accept"),
-      result.invalidReason, match.route.description, match.route.mime_type, match.route.info);
+      result.invalidReason, match.route.description, match.route.mime_type, match.route.info, match.route.route_template);
+  }
+
+  // Validate request against info block (post-payment, pre-proxy)
+  if (match.route.info) {
+    const reqUrl = new URL(c.req.url);
+    const valErr = await validateRequest(c.req.raw, reqUrl, match.route.info);
+    if (valErr) {
+      return new Response(JSON.stringify(valErr), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
   }
 
   // Verification succeeded — proxy with payment headers
@@ -241,11 +256,12 @@ async function handlePaidRequest(
   const asset = usdcAddress(chain);
   const facUrl = facilitatorUrl(env);
   const amount = priceToMicroUsdc(match.price);
-  const reqs = buildRequirements(amount, match.settlement, env.PROVIDER_ADDRESS, facUrl, chain, asset);
+  const sidecarBaseUrl = env.DISCOVERY_BASE_URL || undefined;
+  const reqs = buildRequirements(amount, match.settlement, env.PROVIDER_ADDRESS, facUrl, chain, asset, sidecarBaseUrl);
 
   if (!paymentSig) {
     return make402Response(reqs, requestUrl, match.price, accept,
-      undefined, match.route.description, match.route.mime_type, match.route.info);
+      undefined, match.route.description, match.route.mime_type, match.route.info, match.route.route_template);
   }
 
   const result = await verifyPayment(facUrl, paymentSig, reqs);
@@ -258,7 +274,18 @@ async function handlePaidRequest(
 
   if (!result.isValid) {
     return make402Response(reqs, requestUrl, match.price, accept,
-      result.invalidReason, match.route.description, match.route.mime_type, match.route.info);
+      result.invalidReason, match.route.description, match.route.mime_type, match.route.info, match.route.route_template);
+  }
+
+  // Validate query params from original URI (sidecar has no body access)
+  if (match.route.info) {
+    const qpErr = validateQueryParamsFromUri(requestUrl, match.route.info);
+    if (qpErr) {
+      return new Response(JSON.stringify(qpErr), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
   }
 
   const headers: Record<string, string> = {

@@ -5,7 +5,7 @@ use hyper::{Request, Response};
 use crate::config::{self, Settlement};
 use crate::error::GateError;
 use crate::gate::GateState;
-use crate::response::{build_402, Build402Params, build_requirements, build_settlement_response};
+use crate::response::{build_402, Build402Params, build_requirements_with_base_url, build_settlement_response};
 use crate::routes::RouteMatch;
 use crate::verify;
 
@@ -59,6 +59,7 @@ pub async fn handle_check(
                 state, &price, settlement, payment_sig, req, original_uri_raw,
                 (route.description.as_deref(), route.mime_type.as_deref()),
                 route.info.as_ref(),
+                route.route_template.as_deref(),
             ).await
         }
     }
@@ -74,6 +75,7 @@ async fn handle_paid_check<'a>(
     original_uri: &str,
     meta: (Option<&'a str>, Option<&'a str>),
     info: Option<&'a serde_json::Value>,
+    route_tmpl: Option<&'a str>,
 ) -> Response<Full<Bytes>> {
     let (description, mime_type) = meta;
     let accept = req.headers().get("accept").and_then(|v| v.to_str().ok());
@@ -87,12 +89,14 @@ async fn handle_paid_check<'a>(
             price_display: price, accept, reason: None,
             request_url: original_uri, chain_id: state.chain_id,
             description, mime_type, info,
+            route_template: route_tmpl,
         });
     };
 
-    let requirements = build_requirements(
+    let disc_base_url = state.config.discovery.as_ref().map(|d| d.base_url.as_str());
+    let requirements = build_requirements_with_base_url(
         &amount, settlement, &state.config.provider_address,
-        &state.facilitator_url, state.chain_id,
+        &state.facilitator_url, state.chain_id, disc_base_url,
     );
 
     let gate_domain = crate::gate::extract_domain(&state.config.proxy.target);
@@ -121,7 +125,19 @@ async fn handle_paid_check<'a>(
             reason: result.invalid_reason.as_deref(),
             request_url: original_uri, chain_id: state.chain_id,
             description, mime_type, info,
+            route_template: route_tmpl,
         });
+    }
+
+    // Validate query params from original URI (sidecar has no body access)
+    if let Some(info_val) = info {
+        if let Ok(uri) = original_uri.parse::<hyper::Uri>() {
+            if let Some(err_resp) = crate::validate::validate_request(
+                &uri, req.headers(), info_val,
+            ) {
+                return err_resp;
+            }
+        }
     }
 
     let settlement_str = match settlement {

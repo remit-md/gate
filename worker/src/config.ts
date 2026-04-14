@@ -34,6 +34,7 @@ export function validateRoutes(routes: RouteConfig[]): RouteConfig[] {
       }
     }
     if (r.info) validateInfo(r.info, r.path);
+    if (r.route_template) validateRouteTemplate(r.route_template, r.path);
   }
   return routes;
 }
@@ -140,5 +141,29 @@ function validateInfo(info: BazaarInfo, path: string): void {
     }
   } else {
     throw new Error(`${label}.input.type: must be 'http' or 'mcp', got '${(input as Record<string, unknown>).type}'`);
+  }
+}
+
+/** Validate a route_template per Bazaar spec rules. */
+function validateRouteTemplate(tmpl: string, path: string): void {
+  const label = `Route ${path}.route_template`;
+  if (!tmpl.startsWith("/")) {
+    throw new Error(`${label}: must start with '/'`);
+  }
+  if (tmpl.includes("..")) {
+    throw new Error(`${label}: must not contain '..'`);
+  }
+  if (tmpl.includes("://")) {
+    throw new Error(`${label}: must not contain '://'`);
+  }
+  // Percent-decode before checking for unsafe chars
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(tmpl);
+  } catch {
+    throw new Error(`${label}: invalid percent-encoding`);
+  }
+  if (decoded.includes("..")) {
+    throw new Error(`${label}: must not contain '..' (after decoding)`);
   }
 }

@@ -17,6 +17,8 @@ export interface RouteConfig {
   mime_type?: string;
   /** Bazaar info block — structured input/output description for agents. Replaces hint. */
   info?: BazaarInfo;
+  /** Route template with named path params (e.g. "/users/:id"). When set, used for matching instead of path. */
+  route_template?: string;
 }
 
 /** Bazaar info block — describes how to call and what to expect from an endpoint. */
@@ -31,6 +33,8 @@ export type BazaarInput = HttpQueryInput | HttpBodyInput | McpInput;
 export interface HttpQueryInput {
   type: "http";
   method: "GET" | "HEAD" | "DELETE";
+  /** Path parameter descriptions (e.g. { id: { type: "string", description: "User ID" } }). Validation deferred to P26-4 routeTemplate. */
+  pathParams?: Record<string, ParamDef>;
   queryParams?: Record<string, ParamDef>;
   headers?: Record<string, string>;
 }
@@ -39,7 +43,10 @@ export interface HttpBodyInput {
   type: "http";
   method: "POST" | "PUT" | "PATCH";
   bodyType: "json" | "form-data" | "text";
+  /** JSON Schema (draft 2020-12) describing the request body. Use standard `required` array at object level. */
   body: Record<string, unknown>;
+  /** Path parameter descriptions. Validation deferred to P26-4 routeTemplate. */
+  pathParams?: Record<string, ParamDef>;
   queryParams?: Record<string, ParamDef>;
   headers?: Record<string, string>;
 }

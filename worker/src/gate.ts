@@ -22,7 +22,8 @@ export function matchRoute(
   }
 
   for (const route of routes) {
-    if (!pathMatches(route.path, path)) continue;
+    const pattern = route.route_template || route.path;
+    if (!pathMatches(pattern, path)) continue;
     if (route.method && route.method.toUpperCase() !== method.toUpperCase()) continue;
 
     // Per-route allowlist check
@@ -46,12 +47,12 @@ export function matchRoute(
     : { kind: "blocked" };
 }
 
-/** Glob-style path matching. Supports * (one segment) and ** (any). */
+/** Glob-style path matching. Supports * (one segment), ** (any), and :param (named segment). */
 export function pathMatches(pattern: string, path: string): boolean {
   // Exact match
   if (pattern === path) return true;
 
-  // Convert glob to regex
+  // Convert glob/template to regex
   const parts = pattern.split("/");
   let regex = "^";
   for (let i = 0; i < parts.length; i++) {
@@ -59,6 +60,9 @@ export function pathMatches(pattern: string, path: string): boolean {
     if (part === "**") {
       regex += "/.*";
     } else if (part === "*") {
+      regex += "/[^/]+";
+    } else if (part.startsWith(":")) {
+      // :paramName — matches exactly one non-empty path segment
       regex += "/[^/]+";
     } else if (part.endsWith("*")) {
       // e.g. "premium*" → match any segment starting with "premium"

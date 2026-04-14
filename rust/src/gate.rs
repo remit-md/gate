@@ -6,7 +6,7 @@ use hyper::{Request, Response};
 
 use crate::config::{self, Config, FailMode, GateMode, Settlement};
 use crate::error::GateError;
-use crate::response::{build_402, Build402Params, build_requirements, build_settlement_response};
+use crate::response::{build_402, Build402Params, build_requirements_with_base_url, build_settlement_response};
 use crate::routes::{RouteMatch, RouteMatcher};
 use crate::verify;
 
@@ -69,6 +69,7 @@ pub async fn handle_request(
                         description: route.description.as_deref(),
                         mime_type: route.mime_type.as_deref(),
                         info: route.info.as_ref(),
+                        route_template: route.route_template.as_deref(),
                     });
                     Ok(GateDecision::Respond(resp))
                 }
@@ -77,6 +78,7 @@ pub async fn handle_request(
                         state, sig, &final_price, final_settlement, req, &request_url,
                         (route.description.as_deref(), route.mime_type.as_deref()),
                         route.info.as_ref(),
+                        route.route_template.as_deref(),
                     ).await
                 }
             }
@@ -96,6 +98,8 @@ pub enum GateDecision {
         amount: String,
         settlement: String,
         receipt: String,
+        /// Route info block for request validation (query params, content-type).
+        info: Option<serde_json::Value>,
     },
     /// Return this response directly (402, 403, etc).
     Respond(Response<Full<Bytes>>),
@@ -133,6 +137,7 @@ async fn handle_verification<'a>(
     request_url: &str,
     meta: (Option<&'a str>, Option<&'a str>),
     info: Option<&'a serde_json::Value>,
+    route_tmpl: Option<&'a str>,
 ) -> Result<GateDecision, GateError> {
     let (description, mime_type) = meta;
     let amount = config::price_to_micro_usdc(price);
@@ -144,12 +149,14 @@ async fn handle_verification<'a>(
             amount,
             settlement: settlement_str(settlement).to_string(),
             receipt,
+            info: info.cloned(),
         });
     }
 
-    let requirements = build_requirements(
+    let disc_base_url = state.config.discovery.as_ref().map(|d| d.base_url.as_str());
+    let requirements = build_requirements_with_base_url(
         &amount, settlement, &state.config.provider_address,
-        &state.facilitator_url, state.chain_id,
+        &state.facilitator_url, state.chain_id, disc_base_url,
     );
 
     // Extract domain from proxy target for volume tracking (P11)
@@ -183,6 +190,7 @@ async fn handle_verification<'a>(
                 reason: resp.invalid_reason.as_deref(),
                 request_url, chain_id: state.chain_id,
                 description, mime_type, info,
+                route_template: route_tmpl,
             });
             Ok(GateDecision::Respond(resp_402))
         }
@@ -195,6 +203,7 @@ async fn handle_verification<'a>(
                 amount,
                 settlement: settlement_str(settlement).to_string(),
                 receipt,
+                info: info.cloned(),
             })
         }
     }

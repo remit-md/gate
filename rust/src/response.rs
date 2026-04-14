@@ -72,6 +72,7 @@ pub struct Build402Params<'a> {
     pub description: Option<&'a str>,
     pub mime_type: Option<&'a str>,
     pub info: Option<&'a serde_json::Value>,
+    pub route_template: Option<&'a str>,
 }
 
 /// Build a 402 Payment Required response with v2 wire format.
@@ -97,9 +98,18 @@ pub fn build_402(p: &Build402Params<'_>) -> Response<Full<Bytes>> {
         })),
     };
 
-    let extensions = match p.info {
-        Some(info) => json!({ "bazaar": { "info": info, "schema": build_info_schema(info) } }),
-        None => json!({}),
+    let extensions = if p.info.is_some() || p.route_template.is_some() {
+        let mut bazaar = json!({});
+        if let Some(info) = p.info {
+            bazaar["info"] = info.clone();
+            bazaar["schema"] = build_info_schema(info);
+        }
+        if let Some(tmpl) = p.route_template {
+            bazaar["routeTemplate"] = json!(tmpl);
+        }
+        json!({ "bazaar": bazaar })
+    } else {
+        json!({})
     };
 
     let payment_required = PaymentRequired {
@@ -166,10 +176,31 @@ pub fn build_requirements(
     facilitator_url: &str,
     chain_id: u64,
 ) -> PaymentRequirementsV2 {
+    build_requirements_with_base_url(
+        amount, settlement, provider_address, facilitator_url, chain_id, None,
+    )
+}
+
+/// Build requirements with optional base_url for auto-catalog in facilitator.
+pub fn build_requirements_with_base_url(
+    amount: &str,
+    settlement: Settlement,
+    provider_address: &str,
+    facilitator_url: &str,
+    chain_id: u64,
+    base_url: Option<&str>,
+) -> PaymentRequirementsV2 {
     let settlement_str = match settlement {
         Settlement::Direct => "direct",
         Settlement::Tab => "tab",
     };
+    let mut extra = json!({
+        "settlement": settlement_str,
+        "facilitator": facilitator_url,
+    });
+    if let Some(url) = base_url {
+        extra["base_url"] = json!(url);
+    }
     PaymentRequirementsV2 {
         scheme: "exact".to_string(),
         network: config::caip2_network(chain_id),
@@ -177,10 +208,7 @@ pub fn build_requirements(
         asset: config::usdc_address(chain_id).to_string(),
         pay_to: provider_address.to_string(),
         max_timeout_seconds: 60,
-        extra: Some(json!({
-            "settlement": settlement_str,
-            "facilitator": facilitator_url,
-        })),
+        extra: Some(extra),
     }
 }
 

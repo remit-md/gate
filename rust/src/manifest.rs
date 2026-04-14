@@ -89,6 +89,9 @@ pub fn handle_well_known_x402(state: &GateState) -> Response<Full<Bytes>> {
             if let Some(ref info) = r.info {
                 entry["info"] = info.clone();
             }
+            if let Some(ref tmpl) = r.route_template {
+                entry["routeTemplate"] = json!(tmpl);
+            }
             entry
         })
         .collect();
