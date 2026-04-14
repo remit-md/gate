@@ -11,6 +11,7 @@ mod rate_limit;
 mod response;
 mod routes;
 mod sidecar;
+mod validate;
 mod verify;
 
 use std::net::SocketAddr;
@@ -307,6 +308,17 @@ async fn dispatch(
     // If decision is a direct response (402, etc.), return it
     if let GateDecision::Respond(resp) = decision {
         return Ok(resp);
+    }
+
+    // Validate request against info block (query params + content-type, no body read)
+    if let GateDecision::ProxyVerified { ref info, .. } = decision {
+        if let Some(info_val) = info {
+            if let Some(err_resp) = validate::validate_request(
+                req.uri(), req.headers(), info_val,
+            ) {
+                return Ok(err_resp);
+            }
+        }
     }
 
     // Proxy to origin

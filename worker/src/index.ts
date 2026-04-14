@@ -4,6 +4,7 @@ import { loadRoutes, validateEnv, facilitatorUrl, priceToMicroUsdc, autoSettleme
 import { matchRoute, extractAgentAddress } from "./gate";
 import { verifyPayment, checkFacilitatorHealth } from "./verify";
 import { make402Response, make403Response, make429Response, make503Response, buildRequirements, buildSettlementResponse } from "./response";
+import { validateRequest, validateQueryParamsFromUri } from "./validate";
 import { sendHeartbeat } from "./heartbeat";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -211,6 +212,18 @@ app.all("*", async (c) => {
       result.invalidReason, match.route.description, match.route.mime_type, match.route.info);
   }
 
+  // Validate request against info block (post-payment, pre-proxy)
+  if (match.route.info) {
+    const reqUrl = new URL(c.req.url);
+    const valErr = await validateRequest(c.req.raw, reqUrl, match.route.info);
+    if (valErr) {
+      return new Response(JSON.stringify(valErr), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+  }
+
   // Verification succeeded — proxy with payment headers
   const extraHeaders: Record<string, string> = {
     "X-Pay-Verified": "true",
@@ -259,6 +272,17 @@ async function handlePaidRequest(
   if (!result.isValid) {
     return make402Response(reqs, requestUrl, match.price, accept,
       result.invalidReason, match.route.description, match.route.mime_type, match.route.info);
+  }
+
+  // Validate query params from original URI (sidecar has no body access)
+  if (match.route.info) {
+    const qpErr = validateQueryParamsFromUri(requestUrl, match.route.info);
+    if (qpErr) {
+      return new Response(JSON.stringify(qpErr), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
   }
 
   const headers: Record<string, string> = {

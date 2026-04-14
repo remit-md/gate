@@ -96,6 +96,8 @@ pub enum GateDecision {
         amount: String,
         settlement: String,
         receipt: String,
+        /// Route info block for request validation (query params, content-type).
+        info: Option<serde_json::Value>,
     },
     /// Return this response directly (402, 403, etc).
     Respond(Response<Full<Bytes>>),
@@ -144,6 +146,7 @@ async fn handle_verification<'a>(
             amount,
             settlement: settlement_str(settlement).to_string(),
             receipt,
+            info: info.cloned(),
         });
     }
 
@@ -195,6 +198,7 @@ async fn handle_verification<'a>(
                 amount,
                 settlement: settlement_str(settlement).to_string(),
                 receipt,
+                info: info.cloned(),
             })
         }
     }

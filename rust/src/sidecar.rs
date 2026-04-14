@@ -124,6 +124,17 @@ async fn handle_paid_check<'a>(
         });
     }
 
+    // Validate query params from original URI (sidecar has no body access)
+    if let Some(info_val) = info {
+        if let Ok(uri) = original_uri.parse::<hyper::Uri>() {
+            if let Some(err_resp) = crate::validate::validate_request(
+                &uri, req.headers(), info_val,
+            ) {
+                return err_resp;
+            }
+        }
+    }
+
     let settlement_str = match settlement {
         Settlement::Direct => "direct",
         Settlement::Tab => "tab",
