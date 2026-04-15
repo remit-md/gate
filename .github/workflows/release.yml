@@ -11,7 +11,51 @@ permissions:
   id-token: write
 
 jobs:
+  ci-gate:
+    name: Require green CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Wait for CI to pass on tag commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          REF_JSON=$(gh api "repos/$REPO/git/refs/tags/$TAG")
+          OBJ_TYPE=$(echo "$REF_JSON" | jq -r '.object.type')
+          OBJ_SHA=$(echo "$REF_JSON" | jq -r '.object.sha')
+          if [ "$OBJ_TYPE" = "tag" ]; then
+            SHA=$(gh api "repos/$REPO/git/tags/$OBJ_SHA" --jq '.object.sha')
+          else
+            SHA="$OBJ_SHA"
+          fi
+          echo "Tag $TAG -> commit $SHA"
+          for attempt in $(seq 1 40); do
+            MAP=$(gh api "repos/$REPO/commits/$SHA/check-runs?per_page=100" \
+              --jq '[.check_runs[] | select(.name != "Require green CI") | {name, status, conclusion}]')
+            TOTAL=$(echo "$MAP" | jq 'length')
+            FAILED=$(echo "$MAP" | jq '[.[] | select(.conclusion == "failure" or .conclusion == "cancelled" or .conclusion == "timed_out" or .conclusion == "action_required")] | length')
+            PENDING=$(echo "$MAP" | jq '[.[] | select(.status == "queued" or .status == "in_progress")] | length')
+            if [ "$FAILED" -gt 0 ]; then
+              echo "::error::CI failed on $SHA ($FAILED failing check(s))"
+              echo "$MAP" | jq -r '.[] | [.name, .status, (.conclusion // "-")] | @tsv'
+              exit 1
+            fi
+            if [ "$TOTAL" -gt 0 ] && [ "$PENDING" -eq 0 ]; then
+              echo "All CI checks green on $SHA:"
+              echo "$MAP" | jq -r '.[] | [.name, (.conclusion // "-")] | @tsv'
+              exit 0
+            fi
+            echo "[$attempt/40] $TOTAL check(s), $PENDING pending - waiting 30s"
+            sleep 30
+          done
+          echo "::error::Timed out waiting for CI on $SHA (no completion in 20 min)"
+          exit 1
+
   build:
+    needs: ci-gate
     strategy:
       matrix:
         include:
@@ -146,6 +190,7 @@ jobs:
 
   helm:
     runs-on: ubuntu-latest
+    needs: ci-gate
     steps:
       - uses: actions/checkout@v6
 
