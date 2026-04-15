@@ -311,13 +311,15 @@ async fn dispatch(
     }
 
     // Validate request against info block (query params + content-type, no body read)
-    if let GateDecision::ProxyVerified { ref info, .. } = decision {
-        if let Some(info_val) = info {
-            if let Some(err_resp) = validate::validate_request(
-                req.uri(), req.headers(), info_val,
-            ) {
-                return Ok(err_resp);
-            }
+    if let GateDecision::ProxyVerified {
+        info: Some(ref info_val),
+        ..
+    } = decision
+    {
+        if let Some(err_resp) =
+            validate::validate_request(req.uri(), req.headers(), info_val)
+        {
+            return Ok(err_resp);
         }
     }
 
