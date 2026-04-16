@@ -136,3 +136,75 @@ jobs:
         env:
           TARGET: worker
           GATE_PORT: "8402"
+
+  # Second job: same Rust binary, but against the REAL testnet facilitator
+  # (testnet.pay-skill.com/x402) instead of the mock on :9091. Proves the
+  # full x402 flow end-to-end with a signed tab charge. Unlocks Q101-Q108
+  # (PARTIAL -> YES) in spec/ACCEPTANCE_QUESTIONS.md. See P28-2.1.
+  #
+  # Runs as a separate job so a facilitator outage or rate-limit doesn't
+  # mask a failure in the mocked tests above.
+  test-rust-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Check PAYSKILL_TESTNET_KEY is set
+        env:
+          PAYSKILL_TESTNET_KEY: ${{ secrets.PAYSKILL_TESTNET_KEY }}
+        run: |
+          if [ -z "$PAYSKILL_TESTNET_KEY" ]; then
+            echo "::error::PAYSKILL_TESTNET_KEY secret is not set in the gate repo. See P28-2.1 in spec/plans/P28_ACCEPTANCE_COVERAGE.md."
+            exit 1
+          fi
+
+      - name: Build Rust binary
+        working-directory: rust
+        run: cargo build --release
+
+      - name: Install acceptance deps
+        working-directory: acceptance
+        run: npm install
+
+      - name: Compile acceptance tests
+        working-directory: acceptance
+        run: npx tsc
+
+      - name: Start mock origin
+        working-directory: acceptance
+        run: npx tsx mock-origin.ts &
+
+      - name: Wait for mock origin
+        run: |
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
+            curl -sf http://localhost:9090/__test/requests && break
+            sleep 1
+          done
+
+      - name: Start pay-gate (live testnet facilitator, :8405)
+        run: |
+          # No --facilitator-url override — dev mode defaults to
+          # https://testnet.pay-skill.com/x402 per config::facilitator_url().
+          ./rust/target/release/pay-gate dev \
+            --config acceptance/configs/live.yaml \
+            --port 8405 &
+
+      - name: Wait for pay-gate (live)
+        run: |
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
+            curl -sf http://localhost:8405/__pay/health && break
+            sleep 1
+          done
+
+      - name: Run live-facilitator acceptance tests
+        working-directory: acceptance
+        run: npx tsx --test --test-timeout=120000 tests/gate-live.test.ts
+        env:
+          PAYSKILL_TESTNET_KEY: ${{ secrets.PAYSKILL_TESTNET_KEY }}
+          LIVE_GATE_PORT: "8405"
+          MOCK_ORIGIN_PORT: "9090"
