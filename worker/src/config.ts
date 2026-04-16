@@ -3,11 +3,19 @@ import type { BazaarInfo, Env, RouteConfig } from "./types";
 const ETH_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 const URL_RE = /^https?:\/\/.+/;
 
-/** Load and validate route config from KV (or fallback to empty). */
+/** Load and validate route config from KV, with env var fallback for CI/dev. */
 export async function loadRoutes(env: Env): Promise<RouteConfig[]> {
   const raw = await env.ROUTES.get("routes", "json");
-  if (!raw || !Array.isArray(raw)) return [];
-  return validateRoutes(raw as RouteConfig[]);
+  if (raw && Array.isArray(raw)) return validateRoutes(raw as RouteConfig[]);
+
+  // Fallback: parse from ROUTES_JSON env var. Used by wrangler dev in CI
+  // where KV isn't seeded. Production always uses KV.
+  if (env.ROUTES_JSON) {
+    const parsed = JSON.parse(env.ROUTES_JSON);
+    if (Array.isArray(parsed)) return validateRoutes(parsed as RouteConfig[]);
+  }
+
+  return [];
 }
 
 /** Validate an array of route configs. Throws on invalid. */

@@ -117,18 +117,28 @@ jobs:
         working-directory: acceptance
         run: npx tsx mock-facilitator.ts &
 
+      - name: Write .dev.vars for worker test config
+        working-directory: worker
+        run: |
+          printf '%s\n' \
+            'PROXY_TARGET=http://localhost:9090' \
+            'FACILITATOR_URL=http://localhost:9091' \
+            'PROVIDER_ADDRESS=0x1234567890abcdef1234567890abcdef12345678' \
+            'DEFAULT_ACTION=passthrough' \
+            'FAIL_MODE=closed' \
+            'ROUTES_JSON=[{"path":"/api/v1/premium/*","price":"0.01","settlement":"tab"},{"path":"/api/v1/report","method":"POST","price":"5.00","settlement":"direct"},{"path":"/api/v1/generate/*","price":"0.01","price_endpoint":"http://localhost:9090/internal/pricing","settlement":"tab"},{"path":"/api/v1/health","free":true},{"path":"/api/v1/admin/*","free":true,"allowlist":["0xaaaa000000000000000000000000000000000000"]}]' \
+            > .dev.vars
+
       - name: Start pay-gate (Worker)
         working-directory: worker
         run: npx wrangler dev --port 8402 &
-        env:
-          PROXY_TARGET: "http://localhost:9090"
-          FACILITATOR_URL: "http://localhost:9091"
-          PROVIDER_ADDRESS: "0x1234567890abcdef1234567890abcdef12345678"
-          DEFAULT_ACTION: "passthrough"
-          FAIL_MODE: "closed"
 
       - name: Wait for worker
-        run: sleep 3
+        run: |
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
+            curl -sf http://localhost:8402/__pay/health && break
+            sleep 1
+          done
 
       - name: Run main acceptance tests
         working-directory: acceptance

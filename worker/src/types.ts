@@ -85,6 +85,8 @@ export interface Env {
   RATE_LIMIT_PER_AGENT?: string;
   RATE_LIMIT_VERIFICATION?: string;
   GLOBAL_ALLOWLIST?: string;
+  /** JSON-encoded route array — fallback when KV is empty (CI/dev). */
+  ROUTES_JSON?: string;
   /** Discovery config — set these to register in pay discover catalog. */
   DISCOVERY_BASE_URL?: string;
   DISCOVERY_NAME?: string;
