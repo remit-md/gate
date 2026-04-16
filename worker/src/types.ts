@@ -89,6 +89,8 @@ export interface Env {
   ROUTES_JSON?: string;
   /** Explicit chain ID override — skips URL-based derivation (CI/dev). */
   CHAIN_ID?: string;
+  /** Rate limit window in ms — defaults to 60000 (1 min). Set to 1000 in CI to match Rust's 1s governor. */
+  RATE_LIMIT_WINDOW_MS?: string;
   /** Discovery config — set these to register in pay discover catalog. */
   DISCOVERY_BASE_URL?: string;
   DISCOVERY_NAME?: string;

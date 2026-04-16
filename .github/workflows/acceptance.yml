@@ -128,6 +128,7 @@ jobs:
             'FAIL_MODE=closed' \
             'CHAIN_ID=84532' \
             'RATE_LIMIT_PER_AGENT=50' \
+            'RATE_LIMIT_WINDOW_MS=1000' \
             'ROUTES_JSON=[{"path":"/api/v1/premium/*","price":"0.01","settlement":"tab"},{"path":"/api/v1/report","method":"POST","price":"5.00","settlement":"direct"},{"path":"/api/v1/generate/*","price":"0.01","price_endpoint":"http://localhost:9090/internal/pricing","settlement":"tab"},{"path":"/api/v1/health","free":true},{"path":"/api/v1/admin/*","free":true,"allowlist":["0xaaaa000000000000000000000000000000000000"]}]' \
             > .dev.vars
 

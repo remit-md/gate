@@ -29,6 +29,8 @@ import {
   encodePaymentSignature,
   getLastFacilitatorRequest,
   assertStatus,
+  setOriginError,
+  setOriginHang,
 } from "../setup.js";
 
 /** Build a mock v2 PAYMENT-SIGNATURE header value. */
@@ -45,6 +47,8 @@ describe("pay-gate acceptance", () => {
   beforeEach(async () => {
     await clearOriginRequests();
     await resetFacilitator();
+    await setOriginError(null);
+    await setOriginHang(false);
   });
 
   // ── 1. Unpaid request → 402 ──────────────────────────────────
@@ -362,6 +366,51 @@ describe("pay-gate acceptance", () => {
     assert.equal(settlement.success, true);
     assert.ok(settlement.network.startsWith("eip155:"));
     assert.equal(settlement.payer, "0xagent0000000000000000000000000000000004");
+  });
+
+  // ── Error paths (P28-3.7) ────────────────────────────────────
+
+  it("proxies 500 from origin", async () => {
+    await setFacilitatorBehavior({
+      isValid: true,
+      payer: "0xagent0000000000000000000000000000000099",
+    });
+    await setOriginError(500);
+
+    const resp = await gateRequest("/api/v1/premium/data", {
+      headers: { "PAYMENT-SIGNATURE": mockPaymentSig("0xtest-origin-500") },
+    });
+
+    assertStatus(resp, 500);
+  });
+
+  it("returns 402 for malformed PAYMENT-SIGNATURE (bad base64)", async () => {
+    const resp = await gateRequest("/api/v1/premium/data", {
+      headers: { "PAYMENT-SIGNATURE": "not-valid-base64!@#$" },
+    });
+
+    assertStatus(resp, 402);
+  });
+
+  it("returns 402 for malformed PAYMENT-SIGNATURE (invalid JSON)", async () => {
+    const resp = await gateRequest("/api/v1/premium/data", {
+      headers: { "PAYMENT-SIGNATURE": btoa("garbage json {{{") },
+    });
+
+    assertStatus(resp, 402);
+  });
+
+  it("returns 402 when facilitator rejects payment", async () => {
+    await setFacilitatorBehavior({
+      isValid: false,
+      invalidReason: "insufficient_amount",
+    });
+
+    const resp = await gateRequest("/api/v1/premium/data", {
+      headers: { "PAYMENT-SIGNATURE": mockPaymentSig("0xtest-rejected") },
+    });
+
+    assertStatus(resp, 402);
   });
 
   // ── Verify request format check ──────────────────────────────

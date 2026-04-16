@@ -390,11 +390,12 @@ async function fetchDynamicPrice(
 function isRateLimited(key: string, env: Env): boolean {
   const limitStr = env.RATE_LIMIT_PER_AGENT || "1000";
   const limit = parseInt(limitStr, 10) || 1000;
+  const windowMs = parseInt(env.RATE_LIMIT_WINDOW_MS || "60000", 10) || 60_000;
   const now = Date.now();
   const entry = rateCounts.get(key);
 
   if (!entry || now >= entry.resetAt) {
-    rateCounts.set(key, { count: 1, resetAt: now + 60_000 });
+    rateCounts.set(key, { count: 1, resetAt: now + windowMs });
     return false;
   }
 

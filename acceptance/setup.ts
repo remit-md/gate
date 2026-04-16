@@ -89,6 +89,24 @@ export async function getFacilitatorRequests(): Promise<unknown[]> {
   return resp.json() as Promise<unknown[]>;
 }
 
+/** Set mock origin to return an error code on next proxied request (one-shot). */
+export async function setOriginError(code: number | null): Promise<void> {
+  await fetch(`${ORIGIN_URL}/__test/set-error`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+  });
+}
+
+/** Set mock origin to hang (never respond) on proxied requests. */
+export async function setOriginHang(enabled: boolean): Promise<void> {
+  await fetch(`${ORIGIN_URL}/__test/set-hang`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+}
+
 /** Decode PAYMENT-REQUIRED header (base64 JSON). */
 export function decodePaymentRequired(header: string): Record<string, unknown> {
   return JSON.parse(atob(header));
