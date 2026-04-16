@@ -48,6 +48,11 @@ const LIVE_PROVIDER_ADDRESS = "0x1111111111111111111111111111111111111111";
 // USDC amount requested from the server's /mint endpoint at startup.
 const MINT_AMOUNT_USDC = 100;
 
+// Tab sizing for the shared test wallet. Matches the gate route's
+// $0.01 price so max_charge_per_call sits right at the 402 amount.
+const TAB_AMOUNT_USD = 5;
+const TAB_MAX_CHARGE_USD = 0.01;
+
 // Balance floor under which we proactively recycle the tab.
 const STALE_TAB_FLOOR_USD = 1;
 
@@ -86,22 +91,51 @@ describe(
         console.log(`  mint rate-limited -- funded by a previous run, proceeding`);
       }
 
-      // Proactively recycle a near-empty tab so wallet.request() below
-      // doesn't hit an insufficient-balance error after ~500 runs. Each
-      // run spends $0.01 against a $5 tab; at 1 run/day that's more than
-      // a year, but CI parallel runs and backfills burn it faster.
-      const tabs: Tab[] = await wallet.listTabs();
-      const stale = tabs.find(
+      // Pre-open (or reuse) the shared test tab. We can't let wallet.request()
+      // open it implicitly because SDK 0.2.3's settleViaTab() internally calls
+      // balance() before opening — and balance() has a latent bug where it
+      // divides the server's dollar-formatted balance_usdc string by 1_000_000,
+      // so even with 100 USDC on-chain the SDK sees "$0.0001" and throws
+      // PayInsufficientFundsError. openTab() doesn't call balance(), so we
+      // call it directly in the setup hook.
+      //
+      // This also handles the per-run lifecycle: each run charges $0.01 against
+      // the shared tab (500 runs from a fresh $5 tab). When effectiveBalance
+      // drops below STALE_TAB_FLOOR_USD, we close it and open a fresh one.
+      // At 1 push/day this lasts more than a year; under CI backfill pressure
+      // it burns down faster. Tab state persists across CI runs because the
+      // wallet is shared via the PAYSKILL_TESTNET_KEY secret.
+      const existing = await wallet.listTabs();
+      let liveTab: Tab | undefined = existing.find(
         (t) =>
           t.provider.toLowerCase() === LIVE_PROVIDER_ADDRESS.toLowerCase() &&
-          t.status === "open" &&
-          t.effectiveBalance < STALE_TAB_FLOOR_USD,
+          t.status === "open",
       );
-      if (stale) {
+
+      if (liveTab && liveTab.effectiveBalance < STALE_TAB_FLOOR_USD) {
         console.log(
-          `  closing stale tab ${stale.id} (effectiveBalance $${stale.effectiveBalance.toFixed(2)})`,
+          `  closing stale tab ${liveTab.id} (effectiveBalance $${liveTab.effectiveBalance.toFixed(2)})`,
         );
-        await wallet.closeTab(stale.id);
+        await wallet.closeTab(liveTab.id);
+        liveTab = undefined;
+      }
+
+      if (!liveTab) {
+        console.log(
+          `  opening fresh $${TAB_AMOUNT_USD} tab with ${LIVE_PROVIDER_ADDRESS}`,
+        );
+        liveTab = await wallet.openTab(
+          LIVE_PROVIDER_ADDRESS,
+          TAB_AMOUNT_USD,
+          TAB_MAX_CHARGE_USD,
+        );
+        console.log(
+          `  opened tab ${liveTab.id} (balance $${liveTab.balanceRemaining.toFixed(2)})`,
+        );
+      } else {
+        console.log(
+          `  reusing tab ${liveTab.id} (effectiveBalance $${liveTab.effectiveBalance.toFixed(2)})`,
+        );
       }
     });
 
@@ -139,8 +173,9 @@ describe(
 
       // wallet.request() runs the full x402 dance:
       //   1. GET /api/v1/premium/data -> 402 from gate
-      //   2. SDK parses 402, finds/opens a tab with LIVE_PROVIDER_ADDRESS
-      //      on testnet.pay-skill.com (real on-chain tab open via relayer)
+      //   2. SDK parses 402, lists /tabs, finds the pre-opened tab (see
+      //      before() — we have to open it explicitly to side-step the
+      //      SDK 0.2.3 balance() parsing bug)
       //   3. SDK POSTs /tabs/{id}/charge, receives charge_id
       //   4. SDK retries gate request with PAYMENT-SIGNATURE containing
       //      { extensions: { pay: { settlement, tabId, chargeId } } }
