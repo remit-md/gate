@@ -16,7 +16,9 @@ export async function verifyPayment(
   try {
     paymentPayload = JSON.parse(atob(paymentHeader)) as Record<string, unknown>;
   } catch {
-    return null;
+    // Malformed base64 or invalid JSON — return 402 (bad payment), not
+    // null (which the gate interprets as "facilitator unreachable" → 503).
+    return { isValid: false, invalidReason: "malformed payment signature" };
   }
 
   // Network enforcement: reject payment signed for the wrong chain before

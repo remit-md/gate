@@ -46,9 +46,26 @@ pub async fn verify_payment(
     requirements: &PaymentRequirementsV2,
     gate_domain: Option<&str>,
 ) -> Option<VerifyResponseV2> {
-    let payment_bytes = BASE64.decode(payment_header).ok()?;
-    let payment_payload: serde_json::Value =
-        serde_json::from_slice(&payment_bytes).ok()?;
+    let payment_bytes = match BASE64.decode(payment_header) {
+        Ok(b) => b,
+        Err(_) => {
+            return Some(VerifyResponseV2 {
+                is_valid: false,
+                invalid_reason: Some("malformed payment: invalid base64".into()),
+                payer: None,
+            });
+        }
+    };
+    let payment_payload: serde_json::Value = match serde_json::from_slice(&payment_bytes) {
+        Ok(v) => v,
+        Err(_) => {
+            return Some(VerifyResponseV2 {
+                is_valid: false,
+                invalid_reason: Some("malformed payment: invalid JSON".into()),
+                payer: None,
+            });
+        }
+    };
 
     // Network enforcement: reject payment signed for the wrong chain before
     // hitting the facilitator. Catches testnet-vs-mainnet mismatches at the edge.
