@@ -1,0 +1,39 @@
+version: 1
+
+# Gate config for the live-facilitator acceptance job (test-rust-live).
+#
+# Unlike passthrough.yaml (mocked facilitator), this config is used with
+# `pay-gate dev` and NO --facilitator-url override, so the binary defaults
+# to https://testnet.pay-skill.com/x402 per config::facilitator_url().
+#
+# provider_address is deterministic across CI runs so the shared test
+# wallet reuses a single $5 tab instead of leaking one per run. See
+# tests/gate-live.test.ts for the stale-tab recycle logic.
+
+provider_address: "0x1111111111111111111111111111111111111111"
+
+proxy:
+  target: "http://localhost:9090"
+  timeout: "30s"
+
+routes:
+  - path: "/api/v1/premium/*"
+    price: "0.01"
+    settlement: "tab"
+
+  - path: "/api/v1/health"
+    free: true
+
+default_action: "passthrough"
+
+global_allowlist: []
+
+rate_limits:
+  per_agent: "50/s"
+  verification: "100/s"
+
+fail_mode: "closed"
+
+log:
+  level: "debug"
+  format: "json"

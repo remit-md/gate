@@ -8,8 +8,12 @@
     "test:block": "node --test --test-timeout=30000 dist/tests/gate-block.test.js",
     "test:failopen": "node --test --test-timeout=30000 dist/tests/gate-failopen.test.js",
     "test:config": "node --test --test-timeout=30000 dist/tests/gate-config.test.js",
+    "test:live": "node --test --test-timeout=120000 dist/tests/gate-live.test.js",
     "test:all": "node --test --test-timeout=30000 dist/tests/*.test.js",
     "build": "tsc"
+  },
+  "dependencies": {
+    "@pay-skill/sdk": "^0.2.3"
   },
   "devDependencies": {
     "typescript": "^6.0.2",
