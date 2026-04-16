@@ -16,13 +16,20 @@ let requests: OriginRequest[] = [];
 const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
   const body = await readBody(req);
 
-  const record: OriginRequest = {
-    method: req.method || "GET",
-    url: req.url || "/",
-    headers: req.headers as Record<string, string | string[] | undefined>,
-    body: body || undefined,
-  };
-  requests.push(record);
+  // Record every proxied request so tests can assert on injected headers.
+  // Skip internal control URLs — otherwise getOriginRequests() always
+  // returns /__test/requests as the last entry and tests that look at
+  // `requests[last]` see the harness's own poll instead of the gated
+  // request under test.
+  if (!req.url?.startsWith("/__test/")) {
+    const record: OriginRequest = {
+      method: req.method || "GET",
+      url: req.url || "/",
+      headers: req.headers as Record<string, string | string[] | undefined>,
+      body: body || undefined,
+    };
+    requests.push(record);
+  }
 
   // Special endpoints
   if (req.url === "/__test/requests") {

@@ -214,6 +214,12 @@ describe("pay-gate acceptance", () => {
       await resp.text();
     }
     assert.ok(got429, "Expected 429 within 200 requests (rate limit: 50/s)");
+
+    // Governor's leaky bucket needs idle time to refill before subsequent
+    // tests can hit the gate — with 50/s quota and this test's burst, a
+    // 1.5s wait gives the bucket headroom so tests 9-19 don't cascade
+    // into 429s. Keyed by source IP, so it affects all-localhost tests.
+    await new Promise((r) => setTimeout(r, 1500));
   });
 
   // ── 9. Facilitator down + fail_mode closed → 503 ─────────────
