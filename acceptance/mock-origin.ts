@@ -12,6 +12,8 @@ export interface OriginRequest {
 }
 
 let requests: OriginRequest[] = [];
+let nextErrorCode: number | null = null;
+let hangRequests = false;
 
 const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
   const body = await readBody(req);
@@ -42,6 +44,36 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
     requests = [];
     res.writeHead(200);
     res.end("cleared");
+    return;
+  }
+
+  if (req.url === "/__test/set-error" && req.method === "POST") {
+    const parsed = JSON.parse(body) as { code: number | null };
+    nextErrorCode = parsed.code;
+    res.writeHead(200);
+    res.end("ok");
+    return;
+  }
+
+  if (req.url === "/__test/set-hang" && req.method === "POST") {
+    const parsed = JSON.parse(body) as { enabled: boolean };
+    hangRequests = parsed.enabled;
+    res.writeHead(200);
+    res.end("ok");
+    return;
+  }
+
+  // Configurable error response (for origin-500 tests)
+  if (nextErrorCode && !req.url?.startsWith("/__test/")) {
+    const code = nextErrorCode;
+    nextErrorCode = null; // one-shot
+    res.writeHead(code, { "Content-Type": "text/plain" });
+    res.end(`origin error ${code}`);
+    return;
+  }
+
+  // Configurable hang (for timeout tests) — never respond
+  if (hangRequests && !req.url?.startsWith("/__test/")) {
     return;
   }
 
