@@ -87,6 +87,8 @@ export interface Env {
   GLOBAL_ALLOWLIST?: string;
   /** JSON-encoded route array — fallback when KV is empty (CI/dev). */
   ROUTES_JSON?: string;
+  /** Explicit chain ID override — skips URL-based derivation (CI/dev). */
+  CHAIN_ID?: string;
   /** Discovery config — set these to register in pay discover catalog. */
   DISCOVERY_BASE_URL?: string;
   DISCOVERY_NAME?: string;

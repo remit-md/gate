@@ -96,8 +96,9 @@ export function autoSettlement(price: string): "direct" | "tab" {
   return dollars <= 1.0 ? "tab" : "direct";
 }
 
-/** Derive chain ID from facilitator URL. */
+/** Derive chain ID from facilitator URL, with env override for CI/dev. */
 export function chainId(env: Env): number {
+  if (env.CHAIN_ID) return parseInt(env.CHAIN_ID, 10);
   const url = facilitatorUrl(env);
   return url.includes("testnet") ? 84532 : 8453;
 }
