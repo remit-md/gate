@@ -148,8 +148,10 @@ fn default_log_format() -> String { "json".to_string() }
 
 /// Load config from file with env var overrides.
 pub fn load_config(path: &Path) -> Result<Config, String> {
-    let content = std::fs::read_to_string(path)
+    let raw = std::fs::read_to_string(path)
         .map_err(|e| format!("Failed to read config file {}: {}", path.display(), e))?;
+
+    let content = expand_env_vars(&raw);
 
     let mut config: Config = serde_yaml::from_str(&content)
         .map_err(|e| format!("Failed to parse config: {}", e))?;
@@ -158,6 +160,46 @@ pub fn load_config(path: &Path) -> Result<Config, String> {
     validate_config(&config)?;
 
     Ok(config)
+}
+
+/// Expand `${VAR}` and `${VAR:-default}` in the raw YAML text using process env.
+/// Unset vars with no default become empty strings; `validate_config` then
+/// surfaces the resulting bad value loudly (no silent fallback to a dummy).
+/// Literal `$$` escapes to a single `$`.
+fn expand_env_vars(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut rest = input;
+    loop {
+        let Some(start) = rest.find('$') else {
+            out.push_str(rest);
+            return out;
+        };
+        out.push_str(&rest[..start]);
+        let after = &rest[start + 1..];
+        if let Some(tail) = after.strip_prefix('$') {
+            out.push('$');
+            rest = tail;
+            continue;
+        }
+        let Some(body) = after.strip_prefix('{') else {
+            out.push('$');
+            rest = after;
+            continue;
+        };
+        let Some(end) = body.find('}') else {
+            out.push_str(&rest[start..]);
+            return out;
+        };
+        let expr = &body[..end];
+        let (name, default) = match expr.split_once(":-") {
+            Some((n, d)) => (n, Some(d)),
+            None => (expr, None),
+        };
+        let value = std::env::var(name)
+            .unwrap_or_else(|_| default.unwrap_or("").to_string());
+        out.push_str(&value);
+        rest = &body[end + 1..];
+    }
 }
 
 /// Apply environment variable overrides.
@@ -407,6 +449,38 @@ mod tests {
         assert!(validate_eth_address("0x1234567890abcdef1234567890abcdef12345678", "test").is_ok());
         assert!(validate_eth_address("0xinvalid", "test").is_err());
         assert!(validate_eth_address("not_an_address", "test").is_err());
+    }
+
+    #[test]
+    fn test_expand_env_vars_basic() {
+        // Use unique names to avoid clobbering other tests' env.
+        std::env::set_var("PAY_GATE_TEST_ADDR", "0xabc");
+        assert_eq!(expand_env_vars("x=${PAY_GATE_TEST_ADDR}"), "x=0xabc");
+        std::env::remove_var("PAY_GATE_TEST_ADDR");
+    }
+
+    #[test]
+    fn test_expand_env_vars_default() {
+        std::env::remove_var("PAY_GATE_TEST_MISSING");
+        assert_eq!(
+            expand_env_vars("v=${PAY_GATE_TEST_MISSING:-fallback}"),
+            "v=fallback"
+        );
+    }
+
+    #[test]
+    fn test_expand_env_vars_missing_no_default() {
+        std::env::remove_var("PAY_GATE_TEST_UNSET");
+        // Unset with no default -> empty; validation later rejects the result.
+        assert_eq!(expand_env_vars("v=${PAY_GATE_TEST_UNSET}"), "v=");
+    }
+
+    #[test]
+    fn test_expand_env_vars_escape_and_literal() {
+        // $$ escapes to $, bare $ and unterminated ${ are left alone.
+        assert_eq!(expand_env_vars("price=$$5"), "price=$5");
+        assert_eq!(expand_env_vars("a $ b"), "a $ b");
+        assert_eq!(expand_env_vars("oops ${UNCLOSED"), "oops ${UNCLOSED");
     }
 
     #[test]
