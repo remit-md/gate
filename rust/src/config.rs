@@ -176,17 +176,16 @@ fn expand_env_vars(input: &str) -> String {
         };
         out.push_str(&rest[..start]);
         let after = &rest[start + 1..];
-        if after.starts_with('$') {
+        if let Some(tail) = after.strip_prefix('$') {
             out.push('$');
-            rest = &after[1..];
+            rest = tail;
             continue;
         }
-        if !after.starts_with('{') {
+        let Some(body) = after.strip_prefix('{') else {
             out.push('$');
             rest = after;
             continue;
-        }
-        let body = &after[1..];
+        };
         let Some(end) = body.find('}') else {
             out.push_str(&rest[start..]);
             return out;
