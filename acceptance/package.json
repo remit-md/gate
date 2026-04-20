@@ -13,7 +13,7 @@
     "build": "tsc"
   },
   "dependencies": {
-    "@pay-skill/sdk": "^0.2.3"
+    "@pay-skill/sdk": "^0.2.4"
   },
   "devDependencies": {
     "typescript": "^6.0.2",
